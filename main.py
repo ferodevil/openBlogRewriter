@@ -9,6 +9,7 @@ from src.models.model_factory import ModelFactory
 from src.publishers.wordpress_publisher import WordPressPublisher
 from src.utils.file_handler import FileHandler
 from src.utils.seo_analyzer import SEOAnalyzer
+from src.utils.content_evaluator import ContentEvaluator
 from src.utils.path_utils import get_log_dir, get_config_path
 
 def setup_logging():
@@ -119,40 +120,75 @@ def step1_scrape_content(url, config_path, logger):
     
     return blog_data
 
-def step2_rewrite_content(blog_data, model_name, config_path, logger):
-    """步骤2: 使用大模型改写内容"""
+def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrite_attempts=3):
+    """步骤2: 使用大模型改写内容，包含质量评估和自动重写"""
     logger.info(f"步骤2: 使用{model_name}模型改写内容")
     model = ModelFactory.get_model(model_name, config_path)
+    content_evaluator = ContentEvaluator(config_path)
     
-    # 构建提示词
-    prompt = generate_rewrite_prompt(blog_data['content'], blog_data['metadata'])
-    logger.info(f"生成的改写提示词: {prompt[:100]}...")
+    original_content = blog_data['content']
+    rewritten_content = None
+    seo_title = None
+    seo_description = None
     
-    # 改写内容
-    rewritten_content = model.rewrite_content(blog_data['content'], blog_data['metadata'], prompt)
-    
-    if not rewritten_content:
-        logger.error("内容改写失败")
-        return None
+    for attempt in range(max_rewrite_attempts):
+        # 构建提示词
+        prompt = generate_rewrite_prompt(original_content, blog_data['metadata'])
+        if attempt > 0:
+            logger.info(f"第{attempt+1}次尝试改写内容")
+            # 如果是重写，添加上一次的质量评估建议
+            prompt += "\n\n上一次改写的问题：\n" + "\n".join(quality_result.get('suggestions', []))
+        
+        logger.info(f"生成的改写提示词: {prompt[:100]}...")
+        
+        # 改写内容
+        rewritten_content = model.rewrite_content(original_content, blog_data['metadata'], prompt)
+        
+        if not rewritten_content:
+            logger.error("内容改写失败")
+            continue
+        
+        # 评估内容质量
+        quality_result = content_evaluator.evaluate_content(rewritten_content, original_content)
+        
+        # 保存改写后的内容和质量评估结果
+        file_handler = FileHandler()
+        rewritten_content_path = file_handler.save_content(
+            rewritten_content,
+            f"rewritten_attempt{attempt+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            "rewritten"
+        )
+        
+        quality_result_path = file_handler.save_json(
+            quality_result,
+            f"quality_result_attempt{attempt+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            "quality"
+        )
+        
+        logger.info(f"改写后的内容已保存到: {rewritten_content_path}")
+        logger.info(f"质量评估结果已保存到: {quality_result_path}")
+        logger.info(f"内容质量评分: {quality_result.get('quality_score', 0)}")
+        
+        # 检查内容质量是否达标
+        if not quality_result.get('needs_rewrite', False):
+            logger.info("内容质量评估通过，无需重写")
+            break
+        
+        if attempt < max_rewrite_attempts - 1:
+            logger.warning("内容质量评估未通过，将进行重写")
+            logger.info(f"质量问题: {', '.join(quality_result.get('suggestions', []))}")
+        else:
+            logger.warning(f"已达到最大重写次数 ({max_rewrite_attempts})，使用当前最佳结果")
     
     # 生成SEO友好的标题和描述
-    seo_title = model.generate_seo_title(blog_data['content'], blog_data['metadata'])
-    seo_description = model.generate_seo_description(blog_data['content'], blog_data['metadata'])
-    
-    # 保存改写后的内容
-    file_handler = FileHandler()
-    rewritten_content_path = file_handler.save_content(
-        rewritten_content,
-        f"rewritten_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-        "rewritten"
-    )
-    
-    logger.info(f"改写后的内容已保存到: {rewritten_content_path}")
+    seo_title = model.generate_seo_title(rewritten_content, blog_data['metadata'])
+    seo_description = model.generate_seo_description(rewritten_content, blog_data['metadata'])
     
     return {
         'content': rewritten_content,
         'title': seo_title,
-        'description': seo_description
+        'description': seo_description,
+        'quality_result': quality_result
     }
 
 def step3_seo_optimization(content, title, description, metadata, model_name, config, config_path, logger, iteration=0, max_iterations=3):

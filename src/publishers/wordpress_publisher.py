@@ -4,6 +4,7 @@ import logging
 import yaml
 import os
 import json
+import time
 from datetime import datetime
 from src.utils.path_utils import get_base_dir, get_config_path
 
@@ -47,8 +48,8 @@ class WordPressPublisher:
         token = base64.b64encode(credentials.encode()).decode()
         return {'Authorization': f'Basic {token}'}
     
-    def publish_post(self, title, content, excerpt='', featured_media=0, meta=None):
-        """发布文章到WordPress"""
+    def publish_post(self, title, content, excerpt='', featured_media=0, meta=None, max_retries=3, retry_delay=5):
+        """发布文章到WordPress，带有重试机制"""
         if not self.api_url:
             self.logger.error("WordPress API URL未配置")
             return None
@@ -77,31 +78,40 @@ class WordPressPublisher:
         if meta:
             data['meta'] = meta
         
-        # 发送请求
-        try:
-            headers = self._get_auth_header()
-            headers['Content-Type'] = 'application/json'
+        # 发送请求，带有重试机制
+        for attempt in range(max_retries):
+            try:
+                headers = self._get_auth_header()
+                headers['Content-Type'] = 'application/json'
+                
+                response = requests.post(
+                    endpoint,
+                    headers=headers,
+                    data=json.dumps(data)
+                )
+                
+                response.raise_for_status()
+                result = response.json()
+                
+                self.logger.info(f"文章发布成功: {result.get('link', '')}")
+                return result
             
-            response = requests.post(
-                endpoint,
-                headers=headers,
-                data=json.dumps(data)
-            )
-            
-            response.raise_for_status()
-            result = response.json()
-            
-            self.logger.info(f"文章发布成功: {result.get('link', '')}")
-            return result
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"文章发布尝试 {attempt+1}/{max_retries} 失败: {e}")
+                if hasattr(e, 'response') and e.response:
+                    self.logger.error(f"响应内容: {e.response.text}")
+                
+                if attempt < max_retries - 1:
+                    self.logger.info(f"等待 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                else:
+                    self.logger.error(f"已达到最大重试次数 ({max_retries})，发布失败")
+                    return None
         
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"文章发布失败: {e}")
-            if hasattr(e, 'response') and e.response:
-                self.logger.error(f"响应内容: {e.response.text}")
-            return None
+        return None
     
-    def upload_media(self, file_path, title=None):
-        """上传媒体文件到WordPress"""
+    def upload_media(self, file_path, title=None, max_retries=3, retry_delay=5):
+        """上传媒体文件到WordPress，带有重试机制"""
         if not self.api_url:
             self.logger.error("WordPress API URL未配置")
             return None
@@ -121,18 +131,32 @@ class WordPressPublisher:
             headers['Content-Disposition'] = f'attachment; filename="{filename}"'
             headers['Content-Type'] = self._get_content_type(filename)
             
-            # 发送请求
-            response = requests.post(
-                endpoint,
-                headers=headers,
-                data=file_data
-            )
-            
-            response.raise_for_status()
-            result = response.json()
-            
-            self.logger.info(f"媒体上传成功: {result.get('source_url', '')}")
-            return result
+            # 发送请求，带有重试机制
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(
+                        endpoint,
+                        headers=headers,
+                        data=file_data
+                    )
+                    
+                    response.raise_for_status()
+                    result = response.json()
+                    
+                    self.logger.info(f"媒体上传成功: {result.get('source_url', '')}")
+                    return result
+                
+                except requests.exceptions.RequestException as e:
+                    self.logger.error(f"媒体上传尝试 {attempt+1}/{max_retries} 失败: {e}")
+                    if hasattr(e, 'response') and e.response:
+                        self.logger.error(f"响应内容: {e.response.text}")
+                    
+                    if attempt < max_retries - 1:
+                        self.logger.info(f"等待 {retry_delay} 秒后重试...")
+                        time.sleep(retry_delay)
+                    else:
+                        self.logger.error(f"已达到最大重试次数 ({max_retries})，上传失败")
+                        return None
         
         except Exception as e:
             self.logger.error(f"媒体上传失败: {e}")

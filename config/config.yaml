@@ -62,3 +62,12 @@ seo:
   keyword_density: 0.02
   meta_description_length: 160
   title_max_length: 60
+  threshold: 80
+
+# 内容质量配置
+content_quality:
+  min_readability_score: 60
+  min_originality_score: 70
+  max_avg_sentence_length: 25
+  min_paragraph_count: 5
+  threshold: 70
