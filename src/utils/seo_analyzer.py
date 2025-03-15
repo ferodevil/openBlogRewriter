@@ -92,30 +92,45 @@ class SEOAnalyzer:
             'description_length_status': 'good' if description_length <= self.meta_description_length else 'bad'
         }
     
-    def get_seo_suggestions(self, content_analysis, title_analysis=None, description_analysis=None):
+    def get_seo_suggestions(self, content_analysis, title_analysis, description_analysis):
         """获取SEO优化建议"""
-        suggestions = []
+        suggestions = {
+            'content': [],
+            'title': [],
+            'description': []
+        }
         
         # 内容建议
-        if content_analysis.get('status') == 'success':
-            if content_analysis.get('word_count_status') == 'bad':
-                suggestions.append(f"内容字数({content_analysis.get('word_count')})不足，建议增加到至少{self.min_word_count}字")
-            
-            for keyword, data in content_analysis.get('keyword_density', {}).items():
-                if data.get('status') == 'bad':
-                    if data.get('density', 0) < self.keyword_density * 0.5:
-                        suggestions.append(f"关键词'{keyword}'出现次数过少，当前密度为{data.get('density', 0):.2%}，建议增加到{self.keyword_density:.2%}左右")
-                    else:
-                        suggestions.append(f"关键词'{keyword}'出现次数过多，当前密度为{data.get('density', 0):.2%}，建议减少到{self.keyword_density:.2%}左右")
+        if content_analysis.get('keyword_density', 0) < self.min_keyword_density:
+            suggestions['content'].append(f"关键词密度过低 ({content_analysis.get('keyword_density', 0)}%)，建议增加关键词出现频率")
+        elif content_analysis.get('keyword_density', 0) > self.max_keyword_density:
+            suggestions['content'].append(f"关键词密度过高 ({content_analysis.get('keyword_density', 0)}%)，建议减少关键词出现频率")
+        
+        if content_analysis.get('readability_score', 0) < 60:
+            suggestions['content'].append("可读性较低，建议简化句子结构，使用更通俗的语言")
+        
+        if content_analysis.get('avg_sentence_length', 0) > 25:
+            suggestions['content'].append(f"平均句子长度过长 ({content_analysis.get('avg_sentence_length', 0)}词)，建议缩短句子")
+        
+        if content_analysis.get('paragraph_count', 0) < 5:
+            suggestions['content'].append("段落数量较少，建议增加段落以提高可读性")
         
         # 标题建议
-        if title_analysis and title_analysis.get('status') == 'success':
-            if title_analysis.get('title_length_status') == 'bad':
-                suggestions.append(f"标题长度({title_analysis.get('title_length')})超过建议最大值{self.title_max_length}，建议缩短")
+        if title_analysis.get('length', 0) > 60:
+            suggestions['title'].append(f"标题过长 ({title_analysis.get('length', 0)}字符)，建议缩短至60字符以内")
+        elif title_analysis.get('length', 0) < 30:
+            suggestions['title'].append(f"标题过短 ({title_analysis.get('length', 0)}字符)，建议增加至30-60字符")
+        
+        if not title_analysis.get('has_keyword', False):
+            suggestions['title'].append("标题中未包含关键词，建议添加主要关键词")
         
         # 描述建议
-        if description_analysis and description_analysis.get('status') == 'success':
-            if description_analysis.get('description_length_status') == 'bad':
-                suggestions.append(f"元描述长度({description_analysis.get('description_length')})超过建议最大值{self.meta_description_length}，建议缩短")
+        if description_analysis.get('length', 0) > 160:
+            suggestions['description'].append(f"描述过长 ({description_analysis.get('length', 0)}字符)，建议缩短至160字符以内")
+        elif description_analysis.get('length', 0) < 70:
+            suggestions['description'].append(f"描述过短 ({description_analysis.get('length', 0)}字符)，建议增加至70-160字符")
+        
+        if not description_analysis.get('has_keyword', False):
+            suggestions['description'].append("描述中未包含关键词，建议添加主要关键词")
         
         return suggestions

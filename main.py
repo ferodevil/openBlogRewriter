@@ -9,10 +9,11 @@ from src.models.model_factory import ModelFactory
 from src.publishers.wordpress_publisher import WordPressPublisher
 from src.utils.file_handler import FileHandler
 from src.utils.seo_analyzer import SEOAnalyzer
+from src.utils.path_utils import get_log_dir, get_config_path
 
 def setup_logging():
     """设置日志"""
-    log_dir = os.path.join('d:', 'Python', 'myblog', 'logs')
+    log_dir = get_log_dir()
     os.makedirs(log_dir, exist_ok=True)
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -32,7 +33,7 @@ def setup_logging():
 def load_config(config_path=None):
     """加载配置文件"""
     if config_path is None:
-        config_path = os.path.join('d:', 'Python', 'myblog', 'config', 'config.yaml')
+        config_path = get_config_path()
     
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
@@ -41,21 +42,62 @@ def load_config(config_path=None):
         logging.error(f"加载配置文件失败: {e}")
         return {}
 
-def process_blog(url, model_name, publish=False, config_path=None):
+def process_blog(url, model_name, publish=False, config_path=None, max_iterations=3):
     """处理博客内容"""
     logger = setup_logging()
     config = load_config(config_path)
     
     logger.info(f"开始处理博客: {url}")
     
-    # 1. 爬取博客内容
+    # 步骤1: 爬取博客内容
+    blog_data = step1_scrape_content(url, config_path, logger)
+    if not blog_data:
+        return False
+    
+    # 步骤2: 使用大模型改写内容
+    rewrite_result = step2_rewrite_content(blog_data, model_name, config_path, logger)
+    if not rewrite_result:
+        return False
+    
+    # 步骤3: SEO分析和内容优化
+    seo_result = step3_seo_optimization(
+        rewrite_result['content'], 
+        rewrite_result['title'], 
+        rewrite_result['description'], 
+        blog_data['metadata'], 
+        model_name, 
+        config, 
+        config_path, 
+        logger,
+        max_iterations=max_iterations
+    )
+    if not seo_result:
+        return False
+    
+    # 步骤4: 发布到WordPress（如果需要）
+    if publish:
+        publish_result = step4_publish_content(
+            seo_result['title'],
+            seo_result['content'],
+            seo_result['description'],
+            config_path,
+            logger
+        )
+        if not publish_result:
+            return False
+    
+    logger.info("博客处理完成")
+    return True
+
+def step1_scrape_content(url, config_path, logger):
+    """步骤1: 爬取博客内容"""
     logger.info("步骤1: 爬取博客内容")
     scraper = ScraperFactory.get_scraper(url, config_path)
     blog_data = scraper.scrape(url)
     
     if not blog_data:
         logger.error("爬取博客内容失败")
-        return False
+        return None
     
     # 保存原始内容
     file_handler = FileHandler()
@@ -75,21 +117,30 @@ def process_blog(url, model_name, publish=False, config_path=None):
     logger.info(f"原始内容已保存到: {original_content_path}")
     logger.info(f"元数据已保存到: {metadata_path}")
     
-    # 2. 使用大模型改写内容
+    return blog_data
+
+def step2_rewrite_content(blog_data, model_name, config_path, logger):
+    """步骤2: 使用大模型改写内容"""
     logger.info(f"步骤2: 使用{model_name}模型改写内容")
     model = ModelFactory.get_model(model_name, config_path)
     
-    rewritten_content = model.rewrite_content(blog_data['content'], blog_data['metadata'])
+    # 构建提示词
+    prompt = generate_rewrite_prompt(blog_data['content'], blog_data['metadata'])
+    logger.info(f"生成的改写提示词: {prompt[:100]}...")
+    
+    # 改写内容
+    rewritten_content = model.rewrite_content(blog_data['content'], blog_data['metadata'], prompt)
     
     if not rewritten_content:
         logger.error("内容改写失败")
-        return False
+        return None
     
     # 生成SEO友好的标题和描述
     seo_title = model.generate_seo_title(blog_data['content'], blog_data['metadata'])
     seo_description = model.generate_seo_description(blog_data['content'], blog_data['metadata'])
     
     # 保存改写后的内容
+    file_handler = FileHandler()
     rewritten_content_path = file_handler.save_content(
         rewritten_content,
         f"rewritten_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
@@ -98,15 +149,26 @@ def process_blog(url, model_name, publish=False, config_path=None):
     
     logger.info(f"改写后的内容已保存到: {rewritten_content_path}")
     
-    # 3. SEO分析
-    logger.info("步骤3: 进行SEO分析")
+    return {
+        'content': rewritten_content,
+        'title': seo_title,
+        'description': seo_description
+    }
+
+def step3_seo_optimization(content, title, description, metadata, model_name, config, config_path, logger, iteration=0, max_iterations=3):
+    """步骤3: SEO分析和内容优化"""
+    logger.info(f"步骤3: 进行SEO分析 (迭代 {iteration+1}/{max_iterations})")
     seo_analyzer = SEOAnalyzer(config.get('seo', {}))
     
-    keywords = blog_data['metadata'].get('keywords', '')
-    content_analysis = seo_analyzer.analyze_content(rewritten_content, keywords)
-    title_analysis = seo_analyzer.analyze_title(seo_title)
-    description_analysis = seo_analyzer.analyze_meta_description(seo_description)
+    # 获取关键词
+    keywords = metadata.get('keywords', '')
     
+    # 分析内容
+    content_analysis = seo_analyzer.analyze_content(content, keywords)
+    title_analysis = seo_analyzer.analyze_title(title)
+    description_analysis = seo_analyzer.analyze_meta_description(description)
+    
+    # 获取SEO建议
     seo_suggestions = seo_analyzer.get_seo_suggestions(
         content_analysis,
         title_analysis,
@@ -114,40 +176,169 @@ def process_blog(url, model_name, publish=False, config_path=None):
     )
     
     # 保存SEO分析结果
+    file_handler = FileHandler()
     seo_analysis = {
         'content_analysis': content_analysis,
         'title_analysis': title_analysis,
         'description_analysis': description_analysis,
-        'suggestions': seo_suggestions
+        'suggestions': seo_suggestions,
+        'iteration': iteration + 1
     }
     
     seo_analysis_path = file_handler.save_json(
         seo_analysis,
-        f"seo_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+        f"seo_analysis_iter{iteration+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
         "seo"
     )
     
     logger.info(f"SEO分析结果已保存到: {seo_analysis_path}")
     
-    # 4. 发布到WordPress（如果需要）
-    if publish:
-        logger.info("步骤4: 发布到WordPress")
-        publisher = WordPressPublisher(config_path)
-        
-        result = publisher.publish_post(
-            title=seo_title,
-            content=rewritten_content,
-            excerpt=seo_description
-        )
-        
-        if result:
-            logger.info(f"文章已发布: {result.get('link', '')}")
-        else:
-            logger.error("文章发布失败")
-            return False
+    # 检查是否满足SEO要求
+    seo_score = calculate_seo_score(content_analysis, title_analysis, description_analysis)
+    seo_threshold = config.get('seo', {}).get('threshold', 80)
     
-    logger.info("博客处理完成")
-    return True
+    logger.info(f"SEO评分: {seo_score}, 阈值: {seo_threshold}")
+    
+    if seo_score >= seo_threshold:
+        logger.info("内容已满足SEO要求")
+        return {
+            'content': content,
+            'title': title,
+            'description': description,
+            'seo_score': seo_score,
+            'seo_analysis': seo_analysis
+        }
+    
+    # 如果达到最大迭代次数，返回当前最佳结果
+    if iteration >= max_iterations - 1:
+        logger.warning(f"已达到最大迭代次数 ({max_iterations})，返回当前结果")
+        return {
+            'content': content,
+            'title': title,
+            'description': description,
+            'seo_score': seo_score,
+            'seo_analysis': seo_analysis
+        }
+    
+    # 否则，使用SEO建议进行内容优化
+    logger.info("内容未满足SEO要求，进行优化...")
+    model = ModelFactory.get_model(model_name, config_path)
+    
+    # 构建优化提示词
+    optimization_prompt = generate_optimization_prompt(content, title, description, seo_suggestions)
+    logger.info(f"生成的优化提示词: {optimization_prompt[:100]}...")
+    
+    # 优化内容
+    optimized_content = model.optimize_content(content, optimization_prompt)
+    optimized_title = model.optimize_title(title, seo_suggestions.get('title', []))
+    optimized_description = model.optimize_description(description, seo_suggestions.get('description', []))
+    
+    # 保存优化后的内容
+    optimized_content_path = file_handler.save_content(
+        optimized_content,
+        f"optimized_iter{iteration+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+        "optimized"
+    )
+    
+    logger.info(f"优化后的内容已保存到: {optimized_content_path}")
+    
+    # 递归调用，进行下一轮优化
+    return step3_seo_optimization(
+        optimized_content, 
+        optimized_title, 
+        optimized_description, 
+        metadata, 
+        model_name, 
+        config, 
+        config_path, 
+        logger, 
+        iteration + 1, 
+        max_iterations
+    )
+
+def step4_publish_content(title, content, description, config_path, logger):
+    """步骤4: 发布到WordPress"""
+    logger.info("步骤4: 发布到WordPress")
+    publisher = WordPressPublisher(config_path)
+    
+    result = publisher.publish_post(
+        title=title,
+        content=content,
+        excerpt=description
+    )
+    
+    if result:
+        logger.info(f"文章已发布: {result.get('link', '')}")
+        return result
+    else:
+        logger.error("文章发布失败")
+        return None
+
+def generate_rewrite_prompt(content, metadata):
+    """生成改写提示词"""
+    title = metadata.get('title', '')
+    description = metadata.get('description', '')
+    keywords = metadata.get('keywords', '')
+    
+    prompt = f"""
+请将以下博客文章改写为原创内容，保持主要观点和信息，但使用不同的表达方式。
+
+原文标题: {title}
+原文描述: {description}
+关键词: {keywords}
+
+要求:
+1. 保持文章的主要观点和信息
+2. 使用不同的表达方式和句式
+3. 确保内容通顺、易读
+4. 优化文章结构，使其更加合理
+5. 保留原文中的重要关键词
+6. 生成的内容应当是原创的，避免直接复制原文
+
+请开始改写:
+"""
+    return prompt
+
+def generate_optimization_prompt(content, title, description, seo_suggestions):
+    """生成优化提示词"""
+    content_suggestions = seo_suggestions.get('content', [])
+    title_suggestions = seo_suggestions.get('title', [])
+    description_suggestions = seo_suggestions.get('description', [])
+    
+    prompt = f"""
+请根据以下SEO建议优化文章内容、标题和描述:
+
+当前标题: {title}
+当前描述: {description}
+
+标题优化建议:
+{', '.join(title_suggestions) if title_suggestions else '无'}
+
+描述优化建议:
+{', '.join(description_suggestions) if description_suggestions else '无'}
+
+内容优化建议:
+{', '.join(content_suggestions) if content_suggestions else '无'}
+
+请优化文章内容，使其更符合SEO要求，同时保持内容的可读性和流畅性。
+"""
+    return prompt
+
+def calculate_seo_score(content_analysis, title_analysis, description_analysis):
+    """计算SEO评分"""
+    # 内容评分 (60%)
+    content_score = content_analysis.get('score', 0) * 0.6
+    
+    # 标题评分 (25%)
+    title_score = title_analysis.get('score', 0) * 0.25
+    
+    # 描述评分 (15%)
+    description_score = description_analysis.get('score', 0) * 0.15
+    
+    # 总评分
+    total_score = content_score + title_score + description_score
+    
+    return round(total_score, 2)
 
 def main():
     """主函数"""
@@ -158,10 +349,12 @@ def main():
                        help='使用的大模型')
     parser.add_argument('--publish', '-p', action='store_true', help='是否发布到WordPress')
     parser.add_argument('--config', '-c', help='配置文件路径')
+    parser.add_argument('--max-iterations', '-i', type=int, default=3, help='SEO优化最大迭代次数')
     
     args = parser.parse_args()
     
-    process_blog(args.url, args.model, args.publish, args.config)
+    # 修复：传递max_iterations参数
+    process_blog(args.url, args.model, args.publish, args.config, args.max_iterations)
 
 if __name__ == "__main__":
     main()

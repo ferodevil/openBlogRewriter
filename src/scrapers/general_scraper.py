@@ -1,9 +1,16 @@
 from src.scrapers.base_scraper import BaseScraper
 import re
+import yaml
 from readability import Document
+from bs4 import BeautifulSoup
+from src.utils.path_utils import get_config_path
 
 class GeneralScraper(BaseScraper):
     """通用爬虫，适用于大多数博客网站"""
+    
+    def __init__(self, config_path=None):
+        """初始化爬虫"""
+        self.config = self._load_config(config_path)
     
     def extract_content(self, url):
         """提取文章内容"""
@@ -66,3 +73,15 @@ class GeneralScraper(BaseScraper):
             metadata['published_date'] = date_tag.get('content', '')
         
         return metadata
+    
+    def _load_config(self, config_path=None):
+        """加载配置文件"""
+        if config_path is None:
+            config_path = get_config_path()
+        
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return yaml.safe_load(f)
+        except Exception as e:
+            self.logger.error(f"加载配置文件失败: {e}")
+            return {}

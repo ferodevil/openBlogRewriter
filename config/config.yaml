@@ -1,3 +1,9 @@
+# 路径配置
+paths:
+  base_dir: "~/myblog"  # 基础目录，使用~表示用户主目录
+  data_dir: "~/myblog/data"  # 数据目录
+  log_dir: "~/myblog/logs"  # 日志目录
+
 # 爬虫配置
 scrapers:
   timeout: 30

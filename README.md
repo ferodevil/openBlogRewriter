@@ -1,23 +1,30 @@
 # 博客内容采集与改写发布系统
 
-这是一个功能强大的博客内容采集、改写和发布系统，支持多种大模型，能够生成符合SEO要求的高质量内容。
+一个自动化工具，用于爬取博客内容，使用大模型改写，进行SEO优化，并可选择性地发布到WordPress。
 
 ## 功能特点
 
-1. **内容采集**：自动从URL采集博客内容和元数据
-2. **多模型支持**：支持OpenAI、Azure OpenAI、Anthropic Claude、百度文心一言和本地Ollama等多种大模型
-3. **内容改写**：使用AI模型将采集的内容改写为生动有趣、专业且符合SEO要求的文章
-4. **WordPress发布**：自动将改写后的内容发布到WordPress网站
-5. **SEO分析**：提供内容的SEO分析和优化建议
-6. **可扩展性**：模块化设计，易于扩展新的爬虫、模型和发布平台
+- **多平台支持**：跨平台设计，支持Windows、Linux和macOS
+- **内容爬取**：自动从URL爬取博客内容和元数据
+- **智能改写**：支持多种大模型（OpenAI、Azure OpenAI、Anthropic、百度文心一言、Ollama）
+- **SEO优化**：自动分析内容并提供SEO建议，支持多轮优化迭代
+- **WordPress发布**：一键发布到WordPress网站
+- **GUI界面**：提供图形用户界面，方便操作
+- **命令行支持**：支持命令行操作，便于自动化和批处理
 
 ## 安装
 
-1. 克隆仓库：
+### 环境要求
 
+- Python 3.8+
+- 依赖包：见`requirements.txt`
+
+### 安装步骤
+
+1. 克隆仓库
 ```bash
-git clone https://github.com/yourusername/blog-processor.git
-cd blog-processor
+git clone https://github.com/yourusername/openBlogRewriter.git
+cd openBlogRewriter
 
 2. python main.py https://example.com/blog-post
 3. python main.py https://example.com/blog-post --model openai

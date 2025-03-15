@@ -7,13 +7,14 @@ import queue
 from datetime import datetime
 
 # 添加项目根目录到Python路径
-sys.path.append(os.path.join('d:', 'Python', 'myblog'))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from main import process_blog, load_config
 from src.scrapers.scraper_factory import ScraperFactory
 from src.models.model_factory import ModelFactory
 from src.publishers.wordpress_publisher import WordPressPublisher
 from src.utils.file_handler import FileHandler
+from src.utils.path_utils import get_base_dir, get_config_path
 
 class RedirectText:
     """重定向文本到GUI"""
@@ -125,13 +126,6 @@ class BlogProcessorGUI:
         model_combo = ttk.Combobox(rewrite_tab, textvariable=self.rewrite_model_var, width=20)
         model_combo['values'] = ('openai', 'azure_openai', 'anthropic', 'baidu', 'ollama')
         model_combo.grid(row=1, column=1, sticky=tk.W, pady=5)
-
-        # 模型选择
-        ttk.Label(process_tab, text="模型:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        self.process_model_var = tk.StringVar(value="openai")
-        model_combo = ttk.Combobox(process_tab, textvariable=self.process_model_var, width=20)
-        model_combo['values'] = ('openai', 'azure_openai', 'anthropic', 'baidu', 'ollama')
-        model_combo.grid(row=1, column=1, sticky=tk.W, pady=5)
         
         # 输出文件
         ttk.Label(rewrite_tab, text="输出文件:").grid(row=2, column=0, sticky=tk.W, pady=5)
@@ -144,33 +138,6 @@ class BlogProcessorGUI:
         
         # 配置网格
         rewrite_tab.columnconfigure(1, weight=1)
-    
-    def create_publish_tab(self):
-        """创建发布选项卡"""
-        publish_tab = ttk.Frame(self.notebook, padding="10")
-        self.notebook.add(publish_tab, text="发布")
-        
-        # 输入文件
-        ttk.Label(publish_tab, text="输入文件:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.publish_input_var = tk.StringVar()
-        ttk.Entry(publish_tab, textvariable=self.publish_input_var, width=50).grid(row=0, column=1, sticky=tk.W+tk.E, pady=5)
-        ttk.Button(publish_tab, text="浏览...", command=self.browse_publish_input).grid(row=0, column=2, padx=5, pady=5)
-        
-        # 标题
-        ttk.Label(publish_tab, text="标题:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        self.publish_title_var = tk.StringVar()
-        ttk.Entry(publish_tab, textvariable=self.publish_title_var, width=50).grid(row=1, column=1, sticky=tk.W+tk.E, pady=5)
-        
-        # 摘要
-        ttk.Label(publish_tab, text="摘要:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        self.publish_excerpt_var = tk.StringVar()
-        ttk.Entry(publish_tab, textvariable=self.publish_excerpt_var, width=50).grid(row=2, column=1, sticky=tk.W+tk.E, pady=5)
-        
-        # 发布按钮
-        ttk.Button(publish_tab, text="发布", command=self.publish).grid(row=3, column=1, pady=10)
-        
-        # 配置网格
-        publish_tab.columnconfigure(1, weight=1)
     
     def create_process_tab(self):
         """创建处理选项卡"""
@@ -186,15 +153,20 @@ class BlogProcessorGUI:
         ttk.Label(process_tab, text="模型:").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.process_model_var = tk.StringVar(value="openai")
         model_combo = ttk.Combobox(process_tab, textvariable=self.process_model_var, width=20)
-        model_combo['values'] = ('openai', 'azure_openai', 'anthropic', 'baidu')
+        model_combo['values'] = ('openai', 'azure_openai', 'anthropic', 'baidu', 'ollama')
         model_combo.grid(row=1, column=1, sticky=tk.W, pady=5)
+        
+        # SEO优化迭代次数
+        ttk.Label(process_tab, text="SEO优化迭代次数:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.process_iterations_var = tk.IntVar(value=3)
+        ttk.Spinbox(process_tab, from_=1, to=10, textvariable=self.process_iterations_var, width=5).grid(row=2, column=1, sticky=tk.W, pady=5)
         
         # 发布选项
         self.process_publish_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(process_tab, text="发布到WordPress", variable=self.process_publish_var).grid(row=2, column=1, sticky=tk.W, pady=5)
+        ttk.Checkbutton(process_tab, text="发布到WordPress", variable=self.process_publish_var).grid(row=3, column=1, sticky=tk.W, pady=5)
         
         # 处理按钮
-        ttk.Button(process_tab, text="处理", command=self.process).grid(row=3, column=1, pady=10)
+        ttk.Button(process_tab, text="处理", command=self.process).grid(row=4, column=1, pady=10)
         
         # 配置网格
         process_tab.columnconfigure(1, weight=1)
@@ -206,7 +178,7 @@ class BlogProcessorGUI:
         
         # 配置文件路径
         ttk.Label(settings_tab, text="配置文件:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.config_path_var = tk.StringVar(value=os.path.join('d:', 'Python', 'myblog', 'config', 'config.yaml'))
+        self.config_path_var = tk.StringVar(value=get_config_path())
         ttk.Entry(settings_tab, textvariable=self.config_path_var, width=50).grid(row=0, column=1, sticky=tk.W+tk.E, pady=5)
         ttk.Button(settings_tab, text="浏览...", command=self.browse_config).grid(row=0, column=2, padx=5, pady=5)
         
@@ -450,6 +422,7 @@ class BlogProcessorGUI:
         url = self.process_url_var.get()
         model_name = self.process_model_var.get()
         publish = self.process_publish_var.get()
+        max_iterations = self.process_iterations_var.get()
         
         if not url:
             messagebox.showerror("错误", "请输入博客URL")
@@ -457,9 +430,20 @@ class BlogProcessorGUI:
         
         def _process():
             print(f"开始处理: {url}")
+            print(f"使用模型: {model_name}")
+            print(f"SEO优化最大迭代次数: {max_iterations}")
+            if publish:
+                print("处理完成后将发布到WordPress")
             
             try:
-                success = process_blog(url, model_name, publish, self.config_path_var.get())
+                # 传递最大迭代次数参数
+                success = process_blog(
+                    url, 
+                    model_name, 
+                    publish, 
+                    self.config_path_var.get(),
+                    max_iterations=max_iterations
+                )
                 
                 if success:
                     print("处理完成")

@@ -5,6 +5,7 @@ import yaml
 import os
 import json
 from datetime import datetime
+from src.utils.path_utils import get_base_dir, get_config_path
 
 class WordPressPublisher:
     """WordPress发布器，用于将内容发布到WordPress网站"""
@@ -31,7 +32,7 @@ class WordPressPublisher:
     def _load_config(self, config_path=None):
         """加载配置文件"""
         if config_path is None:
-            config_path = os.path.join('d:', 'Python', 'myblog', 'config', 'config.yaml')
+            config_path = get_config_path()
         
         try:
             with open(config_path, 'r', encoding='utf-8') as f:

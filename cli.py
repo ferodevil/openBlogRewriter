@@ -12,10 +12,11 @@ from src.scrapers.scraper_factory import ScraperFactory
 from src.models.model_factory import ModelFactory
 from src.publishers.wordpress_publisher import WordPressPublisher
 from src.utils.file_handler import FileHandler
+from src.utils.path_utils import get_log_dir, get_config_path
 
 def setup_logging(verbose=False):
     """设置日志"""
-    log_dir = os.path.join('d:', 'Python', 'myblog', 'logs')
+    log_dir = get_log_dir()
     os.makedirs(log_dir, exist_ok=True)
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -147,6 +148,13 @@ def process_command(args):
     else:
         logger.error("处理失败")
         return 1
+
+def load_config(config_path=None):
+    """加载配置文件"""
+    if config_path is None:
+        config_path = get_config_path()
+    
+    return config_path
 
 def main():
     """主函数"""

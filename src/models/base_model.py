@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import yaml
 import os
 import logging
+from src.utils.path_utils import get_config_path
 
 class BaseModel(ABC):
     """大模型基类，定义大模型的通用方法和接口"""
@@ -22,7 +23,7 @@ class BaseModel(ABC):
     def _load_config(self, config_path=None):
         """加载配置文件"""
         if config_path is None:
-            config_path = os.path.join('d:', 'Python', 'myblog', 'config', 'config.yaml')
+            config_path = get_config_path()
         
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -87,3 +88,42 @@ class BaseModel(ABC):
         )
         
         return self.rewrite_content(content, metadata, formatted_prompt)
+    
+    # 在现有方法之后添加以下方法
+    
+    def optimize_content(self, content, optimization_prompt):
+        """根据SEO建议优化内容"""
+        # 这是一个基类方法，应该在子类中实现
+        raise NotImplementedError("子类必须实现此方法")
+    
+    def optimize_title(self, title, title_suggestions):
+        """根据SEO建议优化标题"""
+        prompt = f"""
+        请根据以下SEO建议优化文章标题:
+        
+        当前标题: {title}
+        
+        优化建议:
+        {', '.join(title_suggestions) if title_suggestions else '无'}
+        
+        请直接返回优化后的标题，不要包含任何解释或其他文字。
+        """
+        
+        # 这是一个基类方法，应该在子类中实现
+        raise NotImplementedError("子类必须实现此方法")
+    
+    def optimize_description(self, description, description_suggestions):
+        """根据SEO建议优化描述"""
+        prompt = f"""
+        请根据以下SEO建议优化文章描述:
+        
+        当前描述: {description}
+        
+        优化建议:
+        {', '.join(description_suggestions) if description_suggestions else '无'}
+        
+        请直接返回优化后的描述，不要包含任何解释或其他文字。
+        """
+        
+        # 这是一个基类方法，应该在子类中实现
+        raise NotImplementedError("子类必须实现此方法")

@@ -3,6 +3,7 @@ import json
 import yaml
 import logging
 from datetime import datetime
+from src.utils.path_utils import get_base_dir, get_data_dir
 
 class FileHandler:
     """文件处理工具，用于保存和加载数据"""
@@ -10,7 +11,7 @@ class FileHandler:
     def __init__(self, base_dir=None):
         """初始化文件处理器"""
         if base_dir is None:
-            self.base_dir = os.path.join('d:', 'Python', 'myblog', 'data')
+            self.base_dir = get_data_dir()
         else:
             self.base_dir = base_dir
         

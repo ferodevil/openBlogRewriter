@@ -1,19 +1,28 @@
 import requests
-from bs4 import BeautifulSoup
+import logging
 import yaml
 import os
-import logging
-from abc import ABC, abstractmethod
+from bs4 import BeautifulSoup
+from src.utils.path_utils import get_config_path
 
-class BaseScraper(ABC):
-    """爬虫基类，定义爬虫的通用方法和接口"""
+class BaseScraper:
+    """爬虫基类，提供基本的爬取功能"""
     
     def __init__(self, config_path=None):
         """初始化爬虫"""
         self.config = self._load_config(config_path)
-        self.headers = self.config.get('scrapers', {}).get('headers', {})
-        self.headers['User-Agent'] = self.config.get('scrapers', {}).get('user_agent', '')
-        self.timeout = self.config.get('scrapers', {}).get('timeout', 30)
+        self.scraper_config = self.config.get('scrapers', {})
+        
+        # 设置请求头
+        self.headers = {
+            'User-Agent': self.scraper_config.get('user_agent', 'Mozilla/5.0'),
+        }
+        
+        # 更新额外的请求头
+        self.headers.update(self.scraper_config.get('headers', {}))
+        
+        # 设置超时时间
+        self.timeout = self.scraper_config.get('timeout', 30)
         
         # 设置日志
         logging.basicConfig(
@@ -25,7 +34,7 @@ class BaseScraper(ABC):
     def _load_config(self, config_path=None):
         """加载配置文件"""
         if config_path is None:
-            config_path = os.path.join('d:', 'Python', 'myblog', 'config', 'config.yaml')
+            config_path = get_config_path()
         
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
