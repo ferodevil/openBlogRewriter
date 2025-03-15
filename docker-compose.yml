@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  blog-processor:
+    build: .
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: --help
