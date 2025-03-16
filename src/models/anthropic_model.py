@@ -80,3 +80,84 @@ class AnthropicModel(BaseModel):
         except Exception as e:
             self.logger.error(f"Failed to get prompt template: {e}")
             return ''
+            
+    def optimize_content(self, content, optimization_prompt):
+        """根据SEO建议优化内容"""
+        try:
+            # 重试机制
+            max_retries = 3
+            retry_delay = 5
+            
+            for attempt in range(max_retries):
+                try:
+                    response = self.client.completion(
+                        prompt=f"{anthropic.HUMAN_PROMPT} {optimization_prompt} {anthropic.AI_PROMPT}",
+                        model=self.model,
+                        max_tokens_to_sample=self.max_tokens,
+                        temperature=self.temperature
+                    )
+                    
+                    return response.completion.strip()
+                
+                except (anthropic.APIError, anthropic.APIConnectionError, anthropic.RateLimitError) as e:
+                    if attempt < max_retries - 1:
+                        self.logger.warning(f"API调用失败，正在重试 ({attempt+1}/{max_retries}): {e}")
+                        time.sleep(retry_delay)
+                    else:
+                        raise
+        
+        except Exception as e:
+            self.logger.error(f"内容优化失败: {e}")
+            return content  # 如果失败，返回原始内容
+    
+    def optimize_title(self, title, title_suggestions):
+        """根据SEO建议优化标题"""
+        if not title_suggestions:
+            return title
+        
+        prompt_template = self._get_prompt_template('optimize_title')
+        prompt = prompt_template.format(
+            title=title,
+            suggestions=', '.join(title_suggestions)
+        )
+        
+        try:
+            response = self.client.completion(
+                prompt=f"{anthropic.HUMAN_PROMPT} {prompt} {anthropic.AI_PROMPT}",
+                model=self.model,
+                max_tokens_to_sample=100,
+                temperature=self.temperature
+            )
+            
+            optimized_title = response.completion.strip()
+            return optimized_title
+        
+        except Exception as e:
+            self.logger.error(f"标题优化失败: {e}")
+            return title  # 如果失败，返回原始标题
+    
+    def optimize_description(self, description, description_suggestions):
+        """根据SEO建议优化描述"""
+        if not description_suggestions:
+            return description
+        
+        prompt_template = self._get_prompt_template('optimize_description')
+        prompt = prompt_template.format(
+            description=description,
+            suggestions=', '.join(description_suggestions)
+        )
+        
+        try:
+            response = self.client.completion(
+                prompt=f"{anthropic.HUMAN_PROMPT} {prompt} {anthropic.AI_PROMPT}",
+                model=self.model,
+                max_tokens_to_sample=200,
+                temperature=self.temperature
+            )
+            
+            optimized_description = response.completion.strip()
+            return optimized_description
+        
+        except Exception as e:
+            self.logger.error(f"描述优化失败: {e}")
+            return description  # 如果失败，返回原始描述

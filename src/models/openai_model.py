@@ -72,14 +72,14 @@ class OpenAIModel(BaseModel):
         # 使用OpenAI API优化内容
         try:
             system_prompt = self._get_prompt_template('seo_system')
-            response = self.client.chat.completions.create(
-                model=self.model_config.get('model', 'gpt-3.5-turbo'),
+            response = openai.ChatCompletion.create(
+                model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": optimization_prompt}
                 ],
-                temperature=0.7,
-                max_tokens=4000
+                temperature=self.temperature,
+                max_tokens=self.max_tokens
             )
             
             optimized_content = response.choices[0].message.content.strip()
@@ -102,13 +102,13 @@ class OpenAIModel(BaseModel):
         
         try:
             system_prompt = self._get_prompt_template('seo_system')
-            response = self.client.chat.completions.create(
-                model=self.model_config.get('model', 'gpt-3.5-turbo'),
+            response = openai.ChatCompletion.create(
+                model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
+                temperature=self.temperature,
                 max_tokens=100
             )
             
@@ -132,13 +132,13 @@ class OpenAIModel(BaseModel):
         
         try:
             system_prompt = self._get_prompt_template('seo_system')
-            response = self.client.chat.completions.create(
-                model=self.model_config.get('model', 'gpt-3.5-turbo'),
+            response = openai.ChatCompletion.create(
+                model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
+                temperature=self.temperature,
                 max_tokens=200
             )
             

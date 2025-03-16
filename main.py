@@ -185,15 +185,49 @@ def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrit
     }
 
 def step3_seo_optimization(content, title, description, metadata, model_name, config, config_path, logger, iteration=0, max_iterations=3):
-    """步骤3: SEO分析和内容优化"""
-    logger.info(f"步骤3: 进行SEO分析 (迭代 {iteration+1}/{max_iterations})")
-    seo_analyzer = SEOAnalyzer(config.get('seo', {}))
+    """步骤3: SEO分析和内容优化
     
-    # 获取关键词
-    keywords = metadata.get('keywords', '')
+    对改写后的内容进行SEO分析和优化，通过迭代方式不断提升内容的SEO表现
     
-    # 分析内容
-    content_analysis = seo_analyzer.analyze_content(content, keywords)
+    实现思路：
+    1. 使用SEOAnalyzer对内容、标题和描述进行分析
+    2. 计算当前内容的SEO评分，与阈值比较决定是否需要优化
+    3. 如果需要优化，使用AI模型根据SEO建议进行内容调整
+    4. 迭代优化过程，直到达到SEO评分阈值或达到最大迭代次数
+    
+    Args:
+        content (str): 文章内容
+        title (str): 文章标题
+        description (str): 文章元描述
+        metadata (dict): 文章元数据，包含关键词等信息
+        model_name (str): 使用的AI模型名称
+        config (dict): 配置信息
+        config_path (str): 配置文件路径
+        logger (Logger): 日志记录器
+        iteration (int, optional): 当前迭代次数，默认为0
+        max_iterations (int, optional): 最大迭代次数，默认为3
+        
+    Returns:
+        dict: 包含优化后的内容、标题、描述和SEO评分的字典
+    
+    优化决策逻辑：
+    - 如果SEO评分达到阈值（默认80分），则认为内容已满足SEO要求，直接返回
+    - 如果达到最大迭代次数，即使未达到阈值也返回当前结果
+    - 否则，根据SEO建议进行内容优化，然后递归调用进行下一轮优化
+    
+    SEO评分计算基于以下因素：
+    - 内容字数是否达标
+    - 关键词密度是否在合理范围内
+    - 内部链接数量是否充足
+    - 图片使用是否充分
+    - 标题标签(H2/H3)使用是否合理
+    - 标题长度是否合适
+    - 元描述长度是否合适
+    """
+    
+    # 分析内容、标题和描述
+    seo_analyzer = SEOAnalyzer(config)
+    content_analysis = seo_analyzer.analyze_content(content, metadata.get('keywords', ''))
     title_analysis = seo_analyzer.analyze_title(title)
     description_analysis = seo_analyzer.analyze_meta_description(description)
     
@@ -222,12 +256,14 @@ def step3_seo_optimization(content, title, description, metadata, model_name, co
     
     logger.info(f"SEO分析结果已保存到: {seo_analysis_path}")
     
-    # 检查是否满足SEO要求
+    # 检查是否满足SEO要求 - 计算SEO评分并与阈值比较
+    # SEO评分是对内容质量的综合评估，考虑多个因素并赋予不同权重
     seo_score = calculate_seo_score(content_analysis, title_analysis, description_analysis)
-    seo_threshold = config.get('seo', {}).get('threshold', 80)
+    seo_threshold = config.get('seo', {}).get('threshold', 80)  # 默认阈值为80分
     
     logger.info(f"SEO评分: {seo_score}, 阈值: {seo_threshold}")
     
+    # 如果SEO评分达到或超过阈值，认为内容已满足SEO要求，无需进一步优化
     if seo_score >= seo_threshold:
         logger.info("内容已满足SEO要求")
         return {
@@ -238,7 +274,8 @@ def step3_seo_optimization(content, title, description, metadata, model_name, co
             'seo_analysis': seo_analysis
         }
     
-    # 如果达到最大迭代次数，返回当前最佳结果
+    # 迭代终止条件：如果达到最大迭代次数，即使SEO评分未达标也返回当前最佳结果
+    # 这是为了避免无限循环优化，同时确保在有限资源下获得相对最优的结果
     if iteration >= max_iterations - 1:
         logger.warning(f"已达到最大迭代次数 ({max_iterations})，返回当前结果")
         return {
@@ -249,18 +286,40 @@ def step3_seo_optimization(content, title, description, metadata, model_name, co
             'seo_analysis': seo_analysis
         }
     
-    # 否则，使用SEO建议进行内容优化
+    # 内容优化逻辑：使用SEO建议指导AI模型进行内容优化
+    # 优化过程包括：调整关键词密度、增加内部链接、添加图片、优化标题结构等
     logger.info("内容未满足SEO要求，进行优化...")
-    model = ModelFactory.get_model(model_name, config_path)
+    model = ModelFactory.get_model(model_name, config_path)  # 获取AI模型实例
     
-    # 构建优化提示词
+    # 构建优化提示词 - 将SEO分析结果转化为AI模型可理解的优化指令
+    # 提示词包含具体的SEO问题和优化方向，引导AI模型进行有针对性的内容调整
     optimization_prompt = generate_optimization_prompt(content, title, description, seo_suggestions)
-    logger.info(f"生成的优化提示词: {optimization_prompt[:100]}...")
     
-    # 优化内容
-    optimized_content = model.optimize_content(content, optimization_prompt)
-    optimized_title = model.optimize_title(title, seo_suggestions.get('title', []))
-    optimized_description = model.optimize_description(description, seo_suggestions.get('description', []))
+    # 安全地记录日志，避免对非字符串类型进行切片操作
+    # 这里考虑了提示词可能是字典或字符串的情况，确保日志记录不会出错
+    if isinstance(optimization_prompt, dict):
+        logger.info(f"生成的优化提示词: {str(optimization_prompt)[:100]}...")
+    else:
+        logger.info(f"生成的优化提示词: {str(optimization_prompt)[:100] if optimization_prompt else '无'}...")
+    
+    # 优化内容 - 分别优化文章内容、标题和元描述
+    # 从优化提示词字典中提取内容提示词，用于指导AI模型进行内容优化
+    content_prompt = optimization_prompt.get('content_prompt', '')
+    
+    # 如果没有内容提示词，则构建一个简单的提示词
+    # 这是一个后备机制，确保即使提示词生成失败也能进行基本的优化
+    if not content_prompt:
+        content_suggestions = seo_suggestions.get('content', [])
+        content_prompt = f"请根据以下SEO建议优化内容：\n\n"
+        if content_suggestions:
+            content_prompt += f"内容优化建议：\n{', '.join(content_suggestions)}\n\n"
+        content_prompt += f"原始内容：\n{content}"
+    
+    # 调用AI模型进行内容优化
+    # 分别优化三个部分：文章内容、标题和元描述
+    optimized_content = model.optimize_content(content, content_prompt)  # 优化文章内容
+    optimized_title = model.optimize_title(title, seo_suggestions.get('title', []))  # 优化标题
+    optimized_description = model.optimize_description(description, seo_suggestions.get('description', []))  # 优化元描述
     
     # 保存优化后的内容
     optimized_content_path = file_handler.save_content(
@@ -271,18 +330,25 @@ def step3_seo_optimization(content, title, description, metadata, model_name, co
     
     logger.info(f"优化后的内容已保存到: {optimized_content_path}")
     
-    # 递归调用，进行下一轮优化
+    # 递归调用，进行下一轮优化 - 实现迭代优化的核心机制
+    # 将优化后的内容作为输入，进入下一轮SEO分析和优化
+    # 迭代过程会不断提升内容的SEO表现，直到达到评分阈值或最大迭代次数
+    #
+    # 迭代优化的优势：
+    # 1. 每轮优化都基于前一轮的结果，可以逐步解决复杂的SEO问题
+    # 2. 通过多轮优化，可以平衡不同SEO因素之间的关系
+    # 3. 避免一次性做过多修改导致内容质量下降
     return step3_seo_optimization(
-        optimized_content, 
-        optimized_title, 
-        optimized_description, 
-        metadata, 
-        model_name, 
-        config, 
-        config_path, 
-        logger, 
-        iteration + 1, 
-        max_iterations
+        optimized_content,  # 优化后的内容
+        optimized_title,   # 优化后的标题
+        optimized_description,  # 优化后的元描述
+        metadata,  # 原始元数据保持不变
+        model_name,  # 使用相同的AI模型
+        config,  # 配置信息
+        config_path,  # 配置文件路径
+        logger,  # 日志记录器
+        iteration + 1,  # 迭代次数加1
+        max_iterations  # 最大迭代次数
     )
 
 def step4_publish_content(title, content, description, config_path, logger):
@@ -343,9 +409,20 @@ def generate_optimization_prompt(content, title, description, seo_suggestions):
         suggestions='\n'.join(description_suggestions) if description_suggestions else 'None'
     )
     
+    # 构建内容优化提示词
+    content_prompt = f"请根据以下SEO建议优化内容：\n\n"
+    if content_suggestions:
+        content_prompt += f"内容优化建议：\n{', '.join(content_suggestions)}\n\n"
+    
+    content_prompt += f"标题优化建议：\n{title_prompt}\n\n"
+    content_prompt += f"描述优化建议：\n{description_prompt}\n\n"
+    content_prompt += f"原始内容：\n{content}"
+    
+    # 返回字典，包含各种提示词
     return {
         'title_prompt': title_prompt,
-        'description_prompt': description_prompt
+        'description_prompt': description_prompt,
+        'content_prompt': content_prompt
     }
 
 def calculate_seo_score(content_analysis, title_analysis, description_analysis):

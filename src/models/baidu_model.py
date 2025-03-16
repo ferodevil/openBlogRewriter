@@ -126,3 +126,149 @@ class BaiduModel(BaseModel):
         except Exception as e:
             self.logger.error(f"Failed to get prompt template: {e}")
             return ''
+    
+    def optimize_content(self, content, optimization_prompt):
+        """根据SEO建议优化内容"""
+        if not self.access_token:
+            self.logger.error("百度访问令牌无效")
+            return content
+        
+        url = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions?access_token={self.access_token}"
+        
+        payload = json.dumps({
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "你是一位SEO专家，擅长优化内容使其更符合搜索引擎优化要求。"
+                },
+                {
+                    "role": "user",
+                    "content": optimization_prompt
+                }
+            ],
+            "temperature": self.temperature,
+            "max_output_tokens": self.max_tokens
+        })
+        
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        
+        try:
+            # 重试机制
+            max_retries = 3
+            retry_delay = 5
+            
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(url, headers=headers, data=payload)
+                    result = response.json()
+                    
+                    if "result" in result:
+                        return result["result"]
+                    else:
+                        self.logger.error(f"百度API返回错误: {result}")
+                        return content
+                
+                except requests.exceptions.RequestException as e:
+                    if attempt < max_retries - 1:
+                        self.logger.warning(f"API调用失败，正在重试 ({attempt+1}/{max_retries}): {e}")
+                        time.sleep(retry_delay)
+                    else:
+                        raise
+        
+        except Exception as e:
+            self.logger.error(f"内容优化失败: {e}")
+            return content  # 如果失败，返回原始内容
+    
+    def optimize_title(self, title, title_suggestions):
+        """根据SEO建议优化标题"""
+        if not title_suggestions or not self.access_token:
+            return title
+        
+        prompt_template = self._get_prompt_template('optimize_title')
+        prompt = prompt_template.format(
+            title=title,
+            suggestions=', '.join(title_suggestions)
+        )
+        
+        url = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions?access_token={self.access_token}"
+        
+        payload = json.dumps({
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "你是一位SEO专家，擅长优化标题使其更符合搜索引擎优化要求。"
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": self.temperature,
+            "max_output_tokens": 100
+        })
+        
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, data=payload)
+            result = response.json()
+            
+            if "result" in result:
+                return result["result"]
+            else:
+                self.logger.error(f"百度API返回错误: {result}")
+                return title
+        
+        except Exception as e:
+            self.logger.error(f"标题优化失败: {e}")
+            return title  # 如果失败，返回原始标题
+    
+    def optimize_description(self, description, description_suggestions):
+        """根据SEO建议优化描述"""
+        if not description_suggestions or not self.access_token:
+            return description
+        
+        prompt_template = self._get_prompt_template('optimize_description')
+        prompt = prompt_template.format(
+            description=description,
+            suggestions=', '.join(description_suggestions)
+        )
+        
+        url = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions?access_token={self.access_token}"
+        
+        payload = json.dumps({
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "你是一位SEO专家，擅长优化描述使其更符合搜索引擎优化要求。"
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": self.temperature,
+            "max_output_tokens": 200
+        })
+        
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, data=payload)
+            result = response.json()
+            
+            if "result" in result:
+                return result["result"]
+            else:
+                self.logger.error(f"百度API返回错误: {result}")
+                return description
+        
+        except Exception as e:
+            self.logger.error(f"描述优化失败: {e}")
+            return description  # 如果失败，返回原始描述
