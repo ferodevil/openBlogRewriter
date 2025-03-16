@@ -1,6 +1,5 @@
 import os
 import argparse
-import logging
 import yaml
 from datetime import datetime
 
@@ -10,26 +9,8 @@ from src.publishers.wordpress_publisher import WordPressPublisher
 from src.utils.file_handler import FileHandler
 from src.utils.seo_analyzer import SEOAnalyzer
 from src.utils.content_evaluator import ContentEvaluator
-from src.utils.path_utils import get_log_dir, get_config_path
-
-def setup_logging():
-    """设置日志"""
-    log_dir = get_log_dir()
-    os.makedirs(log_dir, exist_ok=True)
-    
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = os.path.join(log_dir, f"blog_processor_{timestamp}.log")
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler()
-        ]
-    )
-    
-    return logging.getLogger(__name__)
+from src.utils.path_utils import get_config_path
+from src.utils.logger import get_logger
 
 def load_config(config_path=None):
     """加载配置文件"""
@@ -43,12 +24,14 @@ def load_config(config_path=None):
         logging.error(f"加载配置文件失败: {e}")
         return {}
 
-def process_blog(url, model_name, publish=False, config_path=None, max_iterations=3):
+def process_blog(url, publish=False, config_path=None, max_iterations=3):
     """处理博客内容"""
-    logger = setup_logging()
+    logger = get_logger(__name__)
     config = load_config(config_path)
+    model_name = config.get('models', {}).get('active_model', 'openai')
     
     logger.info(f"开始处理博客: {url}")
+    logger.info(f"使用模型: {model_name}")
     
     # 步骤1: 爬取博客内容
     blog_data = step1_scrape_content(url, config_path, logger)
@@ -130,6 +113,7 @@ def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrit
     rewritten_content = None
     seo_title = None
     seo_description = None
+    quality_result = {'suggestions': []}
     
     for attempt in range(max_rewrite_attempts):
         # 构建提示词
@@ -172,7 +156,16 @@ def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrit
         # 检查内容质量是否达标
         if not quality_result.get('needs_rewrite', False):
             logger.info("内容质量评估通过，无需重写")
-            break
+            # 内容质量达标，立即生成SEO标题和描述
+            seo_title = model.generate_seo_title(rewritten_content, blog_data['metadata'])
+            seo_description = model.generate_seo_description(rewritten_content, blog_data['metadata'])
+            
+            return {
+                'content': rewritten_content,
+                'title': seo_title,
+                'description': seo_description,
+                'quality_result': quality_result
+            }
         
         if attempt < max_rewrite_attempts - 1:
             logger.warning("内容质量评估未通过，将进行重写")
@@ -180,7 +173,7 @@ def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrit
         else:
             logger.warning(f"已达到最大重写次数 ({max_rewrite_attempts})，使用当前最佳结果")
     
-    # 生成SEO友好的标题和描述
+    # 如果所有尝试都未通过质量评估或达到最大重写次数，使用最后一次结果
     seo_title = model.generate_seo_title(rewritten_content, blog_data['metadata'])
     seo_description = model.generate_seo_description(rewritten_content, blog_data['metadata'])
     
@@ -316,23 +309,18 @@ def generate_rewrite_prompt(content, metadata):
     description = metadata.get('description', '')
     keywords = metadata.get('keywords', '')
     
-    prompt = f"""
-请将以下博客文章改写为原创内容，保持主要观点和信息，但使用不同的表达方式。
-
-原文标题: {title}
-原文描述: {description}
-关键词: {keywords}
-
-要求:
-1. 保持文章的主要观点和信息
-2. 使用不同的表达方式和句式
-3. 确保内容通顺、易读
-4. 优化文章结构，使其更加合理
-5. 保留原文中的重要关键词
-6. 生成的内容应当是原创的，避免直接复制原文
-
-请开始改写:
-"""
+    # 从配置文件中读取提示词模板
+    config = load_config()
+    prompts = yaml.safe_load(open(get_config_path('prompts.yaml'), 'r', encoding='utf-8'))
+    rewrite_prompt = prompts['base_prompts']['rewrite_user']
+    
+    # 替换模板中的变量
+    prompt = rewrite_prompt.format(
+        title=title,
+        content=content,
+        keywords=keywords
+    )
+    
     return prompt
 
 def generate_optimization_prompt(content, title, description, seo_suggestions):
@@ -341,24 +329,24 @@ def generate_optimization_prompt(content, title, description, seo_suggestions):
     title_suggestions = seo_suggestions.get('title', [])
     description_suggestions = seo_suggestions.get('description', [])
     
-    prompt = f"""
-请根据以下SEO建议优化文章内容、标题和描述:
-
-当前标题: {title}
-当前描述: {description}
-
-标题优化建议:
-{', '.join(title_suggestions) if title_suggestions else '无'}
-
-描述优化建议:
-{', '.join(description_suggestions) if description_suggestions else '无'}
-
-内容优化建议:
-{', '.join(content_suggestions) if content_suggestions else '无'}
-
-请优化文章内容，使其更符合SEO要求，同时保持内容的可读性和流畅性。
-"""
-    return prompt
+    # 从配置文件中读取提示词模板
+    prompts = yaml.safe_load(open(get_config_path('prompts.yaml'), 'r', encoding='utf-8'))
+    
+    # 根据不同的优化类型使用不同的模板
+    title_prompt = prompts['base_prompts']['optimize_title'].format(
+        title=title,
+        suggestions='\n'.join(title_suggestions) if title_suggestions else 'None'
+    )
+    
+    description_prompt = prompts['base_prompts']['optimize_description'].format(
+        description=description,
+        suggestions='\n'.join(description_suggestions) if description_suggestions else 'None'
+    )
+    
+    return {
+        'title_prompt': title_prompt,
+        'description_prompt': description_prompt
+    }
 
 def calculate_seo_score(content_analysis, title_analysis, description_analysis):
     """计算SEO评分"""
@@ -380,17 +368,21 @@ def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='博客内容采集与改写发布系统')
     parser.add_argument('url', help='要采集的博客URL')
-    parser.add_argument('--model', '-m', default='openai', 
-                       choices=['openai', 'azure_openai', 'anthropic', 'baidu', 'ollama'], 
-                       help='使用的大模型')
-    parser.add_argument('--publish', '-p', action='store_true', help='是否发布到WordPress')
     parser.add_argument('--config', '-c', help='配置文件路径')
-    parser.add_argument('--max-iterations', '-i', type=int, default=3, help='SEO优化最大迭代次数')
     
     args = parser.parse_args()
     
-    # 修复：传递max_iterations参数
-    process_blog(args.url, args.model, args.publish, args.config, args.max_iterations)
+    # 从配置文件读取参数
+    config = load_config(args.config)
+    cli_config = config.get('cli', {})
+    
+    # 使用配置文件中的参数
+    process_blog(
+        args.url,
+        cli_config.get('publish', False),
+        args.config,
+        cli_config.get('max_iterations', 3)
+    )
 
 if __name__ == "__main__":
     main()

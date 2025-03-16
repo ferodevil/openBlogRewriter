@@ -1,8 +1,8 @@
 # 路径配置
 paths:
-  base_dir: "~/myblog"  # 基础目录，使用~表示用户主目录
-  data_dir: "~/myblog/data"  # 数据目录
-  log_dir: "~/myblog/logs"  # 日志目录
+  base_dir: "./config"  # 基础目录，使用当前项目目录
+  data_dir: "./config/data"  # 数据目录
+  log_dir: "./config/logs"  # 日志目录
 
 # 爬虫配置
 scrapers:
@@ -14,6 +14,8 @@ scrapers:
 
 # 大模型配置
 models:
+  # 当前生效的大模型，可选值：openai, azure_openai, anthropic, baidu, ollama, siliconflow
+  active_model: "siliconflow"
   openai:
     api_key: "your-openai-api-key"
     model: "gpt-4"
@@ -46,6 +48,14 @@ models:
     model: "llama2"                     # 使用的模型名称
     temperature: 0.7                    # 温度参数
     max_tokens: 2000                    # 最大生成令牌数
+    
+  # 硅基流动API配置
+  siliconflow:
+    api_key: "sk-fogunwxlgmrezxnysruwjofssgicbufgmnvskofdgvlsofvq"
+    base_url: "https://api.siliconflow.cn/v1"
+    model: "Qwen/QwQ-32B"
+    temperature: 0.0
+    max_tokens: 8192
 
 # WordPress配置
 wordpress:
@@ -55,6 +65,11 @@ wordpress:
   categories: [1, 2]  # 分类ID
   tags: [3, 4]  # 标签ID
   status: "draft"  # draft, publish, private
+
+# 命令行配置
+cli:
+  publish: false  # 是否发布到WordPress
+  max_iterations: 3  # SEO优化最大迭代次数
 
 # SEO配置
 seo:

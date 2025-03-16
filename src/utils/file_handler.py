@@ -21,7 +21,7 @@ class FileHandler:
         # 设置日志
         logging.basicConfig(
             level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            format='%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
     

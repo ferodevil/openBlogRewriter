@@ -11,13 +11,15 @@ class SEOAnalyzer:
         # 设置SEO参数
         self.min_word_count = self.config.get('min_word_count', 800)
         self.keyword_density = self.config.get('keyword_density', 0.02)
+        self.min_keyword_density = self.keyword_density * 0.5
+        self.max_keyword_density = self.keyword_density * 1.5
         self.meta_description_length = self.config.get('meta_description_length', 160)
         self.title_max_length = self.config.get('title_max_length', 60)
         
         # 设置日志
         logging.basicConfig(
             level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            format='%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
     
@@ -26,7 +28,7 @@ class SEOAnalyzer:
         if not content:
             return {
                 'status': 'error',
-                'message': '内容为空'
+                'message': 'Content is empty'
             }
         
         # 计算字数
@@ -61,7 +63,7 @@ class SEOAnalyzer:
         if not title:
             return {
                 'status': 'error',
-                'message': '标题为空'
+                'message': 'Title is empty'
             }
         
         # 计算标题长度
@@ -79,7 +81,7 @@ class SEOAnalyzer:
         if not description:
             return {
                 'status': 'error',
-                'message': '描述为空'
+                'message': 'Description is empty'
             }
         
         # 计算描述长度
@@ -102,35 +104,35 @@ class SEOAnalyzer:
         
         # 内容建议
         if content_analysis.get('keyword_density', 0) < self.min_keyword_density:
-            suggestions['content'].append(f"关键词密度过低 ({content_analysis.get('keyword_density', 0)}%)，建议增加关键词出现频率")
+            suggestions['content'].append(f"Keyword density is too low ({content_analysis.get('keyword_density', 0)}%), consider increasing keyword frequency")
         elif content_analysis.get('keyword_density', 0) > self.max_keyword_density:
-            suggestions['content'].append(f"关键词密度过高 ({content_analysis.get('keyword_density', 0)}%)，建议减少关键词出现频率")
+            suggestions['content'].append(f"Keyword density is too high ({content_analysis.get('keyword_density', 0)}%), consider reducing keyword frequency")
         
         if content_analysis.get('readability_score', 0) < 60:
-            suggestions['content'].append("可读性较低，建议简化句子结构，使用更通俗的语言")
+            suggestions['content'].append("Low readability score, consider simplifying sentence structure and using more common language")
         
         if content_analysis.get('avg_sentence_length', 0) > 25:
-            suggestions['content'].append(f"平均句子长度过长 ({content_analysis.get('avg_sentence_length', 0)}词)，建议缩短句子")
+            suggestions['content'].append(f"Average sentence length is too long ({content_analysis.get('avg_sentence_length', 0)} words), consider shortening sentences")
         
         if content_analysis.get('paragraph_count', 0) < 5:
-            suggestions['content'].append("段落数量较少，建议增加段落以提高可读性")
+            suggestions['content'].append("Too few paragraphs, consider adding more paragraphs to improve readability")
         
-        # 标题建议
+        # Title suggestions
         if title_analysis.get('length', 0) > 60:
-            suggestions['title'].append(f"标题过长 ({title_analysis.get('length', 0)}字符)，建议缩短至60字符以内")
+            suggestions['title'].append(f"Title is too long ({title_analysis.get('length', 0)} characters), consider shortening to 60 characters or less")
         elif title_analysis.get('length', 0) < 30:
-            suggestions['title'].append(f"标题过短 ({title_analysis.get('length', 0)}字符)，建议增加至30-60字符")
+            suggestions['title'].append(f"Title is too short ({title_analysis.get('length', 0)} characters), consider extending to 30-60 characters")
         
         if not title_analysis.get('has_keyword', False):
-            suggestions['title'].append("标题中未包含关键词，建议添加主要关键词")
+            suggestions['title'].append("Title does not contain keywords, consider adding main keywords")
         
-        # 描述建议
+        # Description suggestions
         if description_analysis.get('length', 0) > 160:
-            suggestions['description'].append(f"描述过长 ({description_analysis.get('length', 0)}字符)，建议缩短至160字符以内")
+            suggestions['description'].append(f"Description is too long ({description_analysis.get('length', 0)} characters), consider shortening to 160 characters or less")
         elif description_analysis.get('length', 0) < 70:
-            suggestions['description'].append(f"描述过短 ({description_analysis.get('length', 0)}字符)，建议增加至70-160字符")
+            suggestions['description'].append(f"Description is too short ({description_analysis.get('length', 0)} characters), consider extending to 70-160 characters")
         
         if not description_analysis.get('has_keyword', False):
-            suggestions['description'].append("描述中未包含关键词，建议添加主要关键词")
+            suggestions['description'].append("Description does not contain keywords, consider adding main keywords")
         
         return suggestions

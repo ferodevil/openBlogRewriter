@@ -33,11 +33,9 @@ def get_base_dir():
         # 如果读取配置文件失败，使用默认路径
         pass
     
-    # 默认路径
-    if platform.system() == 'Windows':
-        return os.path.join(os.path.expanduser('~'), 'myblog')
-    else:
-        return os.path.join(os.path.expanduser('~'), 'myblog')
+    # 默认路径：使用项目根目录
+    current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return current_dir
 
 def get_data_dir():
     """获取数据目录"""

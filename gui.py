@@ -15,6 +15,7 @@ from src.models.model_factory import ModelFactory
 from src.publishers.wordpress_publisher import WordPressPublisher
 from src.utils.file_handler import FileHandler
 from src.utils.path_utils import get_base_dir, get_config_path
+from src.utils.logger import get_logger
 
 class RedirectText:
     """重定向文本到GUI"""

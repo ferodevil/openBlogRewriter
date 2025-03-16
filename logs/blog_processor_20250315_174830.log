@@ -1,0 +1,32 @@
+2025-03-15 17:48:30,089 - __main__ - INFO - 开始处理博客: https://kinobjects.com/blogs/news/the-best-holiday-incense-to-greet-your-guests-and-soothe-your-stress-for-thanksgiving-christmas-lunar-new-year-and-more
+2025-03-15 17:48:30,089 - __main__ - INFO - 步骤1: 爬取博客内容
+2025-03-15 17:48:30,098 - src.scrapers.base_scraper - INFO - 开始爬取: https://kinobjects.com/blogs/news/the-best-holiday-incense-to-greet-your-guests-and-soothe-your-stress-for-thanksgiving-christmas-lunar-new-year-and-more
+2025-03-15 17:48:32,298 - src.scrapers.base_scraper - INFO - 爬取完成: https://kinobjects.com/blogs/news/the-best-holiday-incense-to-greet-your-guests-and-soothe-your-stress-for-thanksgiving-christmas-lunar-new-year-and-more
+2025-03-15 17:48:32,307 - src.utils.file_handler - INFO - 内容已保存到: D:\Python\openBlogRewriter\data\original\original_20250315_174832.txt
+2025-03-15 17:48:32,308 - src.utils.file_handler - INFO - JSON数据已保存到: D:\Python\openBlogRewriter\data\metadata\metadata_20250315_174832.json
+2025-03-15 17:48:32,308 - __main__ - INFO - 原始内容已保存到: D:\Python\openBlogRewriter\data\original\original_20250315_174832.txt
+2025-03-15 17:48:32,308 - __main__ - INFO - 元数据已保存到: D:\Python\openBlogRewriter\data\metadata\metadata_20250315_174832.json
+2025-03-15 17:48:32,308 - __main__ - INFO - 步骤2: 使用openai模型改写内容
+2025-03-15 17:48:32,436 - __main__ - INFO - 生成的改写提示词: 
+请将以下博客文章改写为原创内容，保持主要观点和信息，但使用不同的表达方式。
+
+原文标题: The Best Holiday Incense - Greet Your Guests & Sooth Y...
+2025-03-15 17:48:33,431 - openai - INFO - error_code=invalid_api_key error_message='Incorrect API key provided: your-ope*******-key. You can find your API key at https://platform.openai.com/account/api-keys.' error_param=None error_type=invalid_request_error message='OpenAI API error received' stream_error=False
+2025-03-15 17:48:33,431 - src.models.base_model - ERROR - 内容重写失败: Incorrect API key provided: your-ope*******-key. You can find your API key at https://platform.openai.com/account/api-keys.
+2025-03-15 17:48:33,431 - __main__ - ERROR - 内容改写失败
+2025-03-15 17:48:33,431 - __main__ - INFO - 第2次尝试改写内容
+2025-03-15 17:48:33,431 - __main__ - INFO - 生成的改写提示词: 
+请将以下博客文章改写为原创内容，保持主要观点和信息，但使用不同的表达方式。
+
+原文标题: The Best Holiday Incense - Greet Your Guests & Sooth Y...
+2025-03-15 17:48:33,678 - openai - INFO - error_code=invalid_api_key error_message='Incorrect API key provided: your-ope*******-key. You can find your API key at https://platform.openai.com/account/api-keys.' error_param=None error_type=invalid_request_error message='OpenAI API error received' stream_error=False
+2025-03-15 17:48:33,688 - src.models.base_model - ERROR - 内容重写失败: Incorrect API key provided: your-ope*******-key. You can find your API key at https://platform.openai.com/account/api-keys.
+2025-03-15 17:48:33,688 - __main__ - ERROR - 内容改写失败
+2025-03-15 17:48:33,688 - __main__ - INFO - 第3次尝试改写内容
+2025-03-15 17:48:33,688 - __main__ - INFO - 生成的改写提示词: 
+请将以下博客文章改写为原创内容，保持主要观点和信息，但使用不同的表达方式。
+
+原文标题: The Best Holiday Incense - Greet Your Guests & Sooth Y...
+2025-03-15 17:48:33,935 - openai - INFO - error_code=invalid_api_key error_message='Incorrect API key provided: your-ope*******-key. You can find your API key at https://platform.openai.com/account/api-keys.' error_param=None error_type=invalid_request_error message='OpenAI API error received' stream_error=False
+2025-03-15 17:48:33,935 - src.models.base_model - ERROR - 内容重写失败: Incorrect API key provided: your-ope*******-key. You can find your API key at https://platform.openai.com/account/api-keys.
+2025-03-15 17:48:33,935 - __main__ - ERROR - 内容改写失败

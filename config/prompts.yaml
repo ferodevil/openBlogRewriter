@@ -1,0 +1,97 @@
+# Base prompts for all models
+base_prompts:
+  # System prompt for content rewriting
+  rewrite_system: "You are a professional content creator, skilled at rewriting articles to make them more engaging while maintaining professionalism and SEO-friendliness."
+  
+  # System prompt for SEO optimization
+  seo_system: "You are an SEO expert, skilled at optimizing article content to improve search engine rankings."
+  
+  # User prompt template for content rewriting
+  rewrite_user: |
+    Please rewrite the following blog article to make it more engaging while maintaining professionalism and SEO-friendliness.
+    
+    Requirements:
+    1. Maintain the main points and information from the original text
+    2. Use more attractive titles and openings
+    3. Add vivid examples and metaphors
+    4. Use more subheadings and lists to improve readability
+    5. Ensure the article includes the following keywords: {keywords}
+    6. The article should meet SEO requirements, including appropriate keyword density
+    7. The article should have a clear structure: introduction, body, and conclusion
+    8. Add some call-to-action (CTA) phrases
+    9. Total word count should not be less than the original
+    
+    Original Title: {title}
+    
+    Original Content:
+    {content}
+    
+    Please return the complete rewritten article directly, including the title.
+
+  # User prompt template for SEO title generation
+  generate_seo_title: |
+    Please generate an SEO-friendly title for the following content. The title should:
+    1. Include main keywords
+    2. Be engaging and clickable
+    3. Not exceed 60 characters
+    4. Clearly express the article's topic
+    
+    Content Summary:
+    {content}
+    
+    Original Title (if any):
+    {title}
+    
+    Please return the title directly, without any explanations or additional text.
+
+  # User prompt template for SEO description generation
+  generate_seo_description: |
+    Please generate an SEO-friendly meta description for the following content. The description should:
+    1. Include main keywords
+    2. Be engaging and clickable
+    3. Not exceed 160 characters
+    4. Concisely summarize the article content
+    
+    Content Summary:
+    {content}
+    
+    Original Description (if any):
+    {description}
+    
+    Please return the description directly, without any explanations or additional text.
+
+  # User prompt template for title optimization
+  optimize_title: |
+    Please optimize the article title based on the following SEO suggestions:
+    
+    Current Title: {title}
+    
+    Optimization Suggestions:
+    {suggestions}
+    
+    Please return the optimized title directly, without any explanations or additional text.
+
+  # User prompt template for description optimization
+  optimize_description: |
+    Please optimize the article description based on the following SEO suggestions:
+    
+    Current Description: {description}
+    
+    Optimization Suggestions:
+    {suggestions}
+    
+    Please return the optimized description directly, without any explanations or additional text.
+
+# Model-specific prompts
+model_specific_prompts:
+  baidu:
+    # Add Baidu-specific prompts if needed
+    rewrite_system: "You are a professional content creator, skilled at rewriting articles to make them more engaging while maintaining professionalism and SEO-friendliness."
+
+  ollama:
+    # Add Ollama-specific prompts if needed
+    rewrite_system: "You are a professional content creator, skilled at rewriting articles to make them more engaging while maintaining professionalism and SEO-friendliness."
+
+  siliconflow:
+    # Add SiliconFlow-specific prompts if needed
+    rewrite_system: "You are a professional content creator, skilled at rewriting articles to make them more engaging while maintaining professionalism and SEO-friendliness."

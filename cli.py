@@ -1,8 +1,6 @@
 import argparse
 import sys
 import os
-import logging
-from datetime import datetime
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.join('d:', 'Python', 'myblog'))
@@ -12,32 +10,12 @@ from src.scrapers.scraper_factory import ScraperFactory
 from src.models.model_factory import ModelFactory
 from src.publishers.wordpress_publisher import WordPressPublisher
 from src.utils.file_handler import FileHandler
-from src.utils.path_utils import get_log_dir, get_config_path
-
-def setup_logging(verbose=False):
-    """设置日志"""
-    log_dir = get_log_dir()
-    os.makedirs(log_dir, exist_ok=True)
-    
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = os.path.join(log_dir, f"cli_{timestamp}.log")
-    
-    level = logging.DEBUG if verbose else logging.INFO
-    
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler()
-        ]
-    )
-    
-    return logging.getLogger(__name__)
+from src.utils.path_utils import get_config_path
+from src.utils.logger import get_logger
 
 def scrape_command(args):
     """爬取命令"""
-    logger = setup_logging(args.verbose)
+    logger = get_logger(__name__, args.verbose, "cli")
     logger.info(f"爬取URL: {args.url}")
     
     scraper = ScraperFactory.get_scraper(args.url, args.config)
@@ -70,7 +48,7 @@ def scrape_command(args):
 
 def rewrite_command(args):
     """改写命令"""
-    logger = setup_logging(args.verbose)
+    logger = get_logger(__name__, args.verbose, "cli")
     logger.info(f"使用{args.model}模型改写内容")
     
     # 加载内容
@@ -108,7 +86,7 @@ def rewrite_command(args):
 
 def publish_command(args):
     """发布命令"""
-    logger = setup_logging(args.verbose)
+    logger = get_logger(__name__, args.verbose, "cli")
     logger.info(f"发布内容到WordPress")
     
     # 加载内容
@@ -137,7 +115,7 @@ def publish_command(args):
 
 def process_command(args):
     """处理命令（爬取+改写+发布）"""
-    logger = setup_logging(args.verbose)
+    logger = get_logger(__name__, args.verbose, "cli")
     logger.info(f"处理URL: {args.url}")
     
     success = process_blog(args.url, args.model, args.publish, args.config)

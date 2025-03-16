@@ -32,10 +32,11 @@ class AzureOpenAIModel(BaseModel):
             
             for attempt in range(max_retries):
                 try:
+                    system_prompt = self._get_prompt_template('rewrite_system')
                     response = openai.ChatCompletion.create(
                         deployment_id=self.deployment_name,
                         messages=[
-                            {"role": "system", "content": "你是一位专业的内容创作者，擅长改写文章使其更加生动有趣，同时保持专业性和SEO友好。"},
+                            {"role": "system", "content": system_prompt},
                             {"role": "user", "content": prompt}
                         ],
                         temperature=self.temperature,
@@ -56,31 +57,33 @@ class AzureOpenAIModel(BaseModel):
             return None
     
     def _generate_rewrite_prompt(self, content, metadata=None):
-        """生成重写提示"""
-        # 与OpenAI模型使用相同的提示
+        """Generate rewrite prompt from config"""
         title = metadata.get('title', '') if metadata else ''
         keywords = metadata.get('keywords', '') if metadata else ''
         
-        prompt = f"""
-        请改写以下博客文章，使其更加生动有趣，同时保持专业性和SEO友好。
-        
-        要求：
-        1. 保持原文的主要观点和信息
-        2. 使用更吸引人的标题和开头
-        3. 增加生动的例子和比喻
-        4. 使用更多的小标题和列表，提高可读性
-        5. 确保文章包含以下关键词：{keywords}
-        6. 文章应该符合SEO要求，包括适当的关键词密度
-        7. 文章应该有清晰的结构：引言、主体和结论
-        8. 增加一些号召性用语(CTA)
-        9. 总字数不少于原文
-        
-        原文标题：{title}
-        
-        原文内容：
-        {content}
-        
-        请直接返回改写后的完整文章，包括标题。
-        """
+        prompt_template = self._get_prompt_template('rewrite_user')
+        prompt = prompt_template.format(
+            title=title,
+            keywords=keywords,
+            content=content
+        )
         
         return prompt
+        
+    def _get_prompt_template(self, prompt_key):
+        """Get prompt template by key from prompts.yaml
+        
+        First try to get model-specific prompt from model_specific_prompts,
+        if not found, fallback to base prompt from base_prompts.
+        """
+        try:
+            # Try to get model-specific prompt first
+            model_specific = self.prompts.get('model_specific_prompts', {}).get('azure_openai', {}).get(prompt_key)
+            if model_specific:
+                return model_specific
+            
+            # Fallback to base prompt
+            return super()._get_prompt_template(prompt_key)
+        except Exception as e:
+            self.logger.error(f"Failed to get prompt template: {e}")
+            return ''

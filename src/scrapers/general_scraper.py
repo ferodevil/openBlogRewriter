@@ -10,6 +10,7 @@ class GeneralScraper(BaseScraper):
     
     def __init__(self, config_path=None):
         """初始化爬虫"""
+        super().__init__(config_path)
         self.config = self._load_config(config_path)
     
     def extract_content(self, url):

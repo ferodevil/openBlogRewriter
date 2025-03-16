@@ -20,7 +20,7 @@ class OllamaModel(BaseModel):
         # 设置日志
         logging.basicConfig(
             level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            format='%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
     
@@ -67,124 +67,41 @@ class OllamaModel(BaseModel):
             return None
     
     def _generate_rewrite_prompt(self, content, metadata=None):
-        """生成重写提示"""
+        """Generate rewrite prompt from config"""
         title = metadata.get('title', '') if metadata else ''
         keywords = metadata.get('keywords', '') if metadata else ''
         
-        prompt = f"""
-        请改写以下博客文章，使其更加生动有趣，同时保持专业性和SEO友好。
-        
-        要求：
-        1. 保持原文的主要观点和信息
-        2. 使用更吸引人的标题和开头
-        3. 增加生动的例子和比喻
-        4. 使用更多的小标题和列表，提高可读性
-        5. 确保文章包含以下关键词：{keywords}
-        6. 文章应该符合SEO要求，包括适当的关键词密度
-        7. 文章应该有清晰的结构：引言、主体和结论
-        8. 增加一些号召性用语(CTA)
-        9. 总字数不少于原文
-        
-        原文标题：{title}
-        
-        原文内容：
-        {content}
-        
-        请直接返回改写后的完整文章，包括标题。
-        """
+        prompt_template = self._get_prompt_template('rewrite_user')
+        prompt = prompt_template.format(
+            title=title,
+            keywords=keywords,
+            content=content
+        )
         
         return prompt
     
     def generate_seo_title(self, content, metadata=None):
         """生成SEO友好的标题"""
-        title = metadata.get('title', '') if metadata else ''
-        keywords = metadata.get('keywords', '') if metadata else ''
-        
-        prompt = f"""
-        请为以下博客文章生成一个SEO友好的标题。
-        
-        要求：
-        1. 标题应该包含主要关键词
-        2. 标题应该吸引人，引起读者兴趣
-        3. 标题长度应该在60个字符以内
-        4. 标题应该清晰地表达文章的主题
-        
-        原文标题：{title}
-        关键词：{keywords}
-        
-        文章内容：
-        {content[:500]}...
-        
-        请直接返回生成的标题，不要包含任何其他内容。
-        """
-        
-        try:
-            url = f"{self.base_url}/api/generate"
-            
-            payload = {
-                "model": self.model,
-                "prompt": prompt,
-                "temperature": 0.7,
-                "max_tokens": 100
-            }
-            
-            headers = {
-                "Content-Type": "application/json"
-            }
-            
-            response = requests.post(url, headers=headers, data=json.dumps(payload))
-            response.raise_for_status()
-            
-            result = response.json()
-            return result.get("response", "").strip()
-        
-        except Exception as e:
-            self.logger.error(f"生成SEO标题失败: {e}")
-            return title
+        return super().generate_seo_title(content, metadata)
     
     def generate_seo_description(self, content, metadata=None):
         """生成SEO友好的描述"""
-        description = metadata.get('description', '') if metadata else ''
-        keywords = metadata.get('keywords', '') if metadata else ''
+        return super().generate_seo_description(content, metadata)
+    
+    def _get_prompt_template(self, prompt_key):
+        """Get prompt template by key from prompts.yaml
         
-        prompt = f"""
-        请为以下博客文章生成一个SEO友好的元描述。
-        
-        要求：
-        1. 描述应该包含主要关键词
-        2. 描述应该简洁明了，概括文章的主要内容
-        3. 描述长度应该在150-160个字符之间
-        4. 描述应该吸引人，引起读者兴趣
-        
-        原文描述：{description}
-        关键词：{keywords}
-        
-        文章内容：
-        {content[:500]}...
-        
-        请直接返回生成的元描述，不要包含任何其他内容。
+        First try to get model-specific prompt from model_specific_prompts,
+        if not found, fallback to base prompt from base_prompts.
         """
-        
         try:
-            url = f"{self.base_url}/api/generate"
+            # Try to get model-specific prompt first
+            model_specific = self.prompts.get('model_specific_prompts', {}).get('ollama', {}).get(prompt_key)
+            if model_specific:
+                return model_specific
             
-            payload = {
-                "model": self.model,
-                "prompt": prompt,
-                "temperature": 0.7,
-                "max_tokens": 200
-            }
-            
-            headers = {
-                "Content-Type": "application/json"
-            }
-            
-            response = requests.post(url, headers=headers, data=json.dumps(payload))
-            response.raise_for_status()
-            
-            result = response.json()
-            return result.get("response", "").strip()
-        
+            # Fallback to base prompt
+            return super()._get_prompt_template(prompt_key)
         except Exception as e:
-            self.logger.error(f"生成SEO描述失败: {e}")
-            return description
+            self.logger.error(f"Failed to get prompt template: {e}")
+            return ''
