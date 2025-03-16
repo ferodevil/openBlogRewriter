@@ -366,21 +366,22 @@ def calculate_seo_score(content_analysis, title_analysis, description_analysis):
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description='博客内容采集与改写发布系统')
-    parser.add_argument('url', help='要采集的博客URL')
-    parser.add_argument('--config', '-c', help='配置文件路径')
-    
-    args = parser.parse_args()
-    
-    # 从配置文件读取参数
-    config = load_config(args.config)
+    # 加载配置文件
+    config_path = get_config_path()
+    config = load_config(config_path)
     cli_config = config.get('cli', {})
+    
+    # 从配置文件获取URL和其他参数
+    blog_url = cli_config.get('blog_url', '')
+    if not blog_url:
+        print("错误: 配置文件中未设置blog_url参数")
+        return
     
     # 使用配置文件中的参数
     process_blog(
-        args.url,
+        blog_url,
         cli_config.get('publish', False),
-        args.config,
+        config_path,
         cli_config.get('max_iterations', 3)
     )
 

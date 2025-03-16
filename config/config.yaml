@@ -68,6 +68,7 @@ wordpress:
 
 # 命令行配置
 cli:
+  blog_url: "https://kinobjects.com/blogs/news/the-best-holiday-incense-to-greet-your-guests-and-soothe-your-stress-for-thanksgiving-christmas-lunar-new-year-and-more"  # 要采集的博客URL
   publish: false  # 是否发布到WordPress
   max_iterations: 3  # SEO优化最大迭代次数
 
@@ -86,3 +87,10 @@ content_quality:
   max_avg_sentence_length: 25
   min_paragraph_count: 5
   threshold: 70
+
+# 版权保护配置
+copyright_protection:
+  # 禁用词汇列表，这些词汇将在内容中被检测并建议移除
+  forbidden_terms: ["kinobjects", "kinobjects.com", "© Kinobjects", "All rights reserved by Kinobjects"]
+  # 是否自动检测原网站品牌名称
+  detect_brand_names: true

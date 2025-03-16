@@ -20,6 +20,9 @@ base_prompts:
     7. The article should have a clear structure: introduction, body, and conclusion
     8. Add some call-to-action (CTA) phrases
     9. Total word count should not be less than the original
+    10. IMPORTANT: DO NOT include any original website names, brand names, or copyright information from the source article
+    11. IMPORTANT: Replace any specific brand names with generic terms to avoid copyright issues
+    12. Add at least 2 internal links, 1 image reference, and use proper H2/H3 headings for better SEO structure
     
     Original Title: {title}
     

@@ -49,9 +49,16 @@ def get_config_dir():
     """获取配置目录"""
     return os.path.join(get_base_dir(), 'config')
 
-def get_config_path():
-    """获取配置文件路径"""
+def get_config_path(filename='config.yaml'):
+    """获取配置文件路径
+    
+    Args:
+        filename (str, optional): 配置文件名. Defaults to 'config.yaml'.
+    
+    Returns:
+        str: 配置文件的完整路径
+    """
     config_path = os.environ.get('BLOG_REWRITER_CONFIG_PATH')
     if config_path:
-        return config_path
-    return os.path.join(get_config_dir(), 'config.yaml')
+        return os.path.join(os.path.dirname(config_path), filename)
+    return os.path.join(get_config_dir(), filename)

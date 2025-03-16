@@ -18,6 +18,11 @@ class ContentEvaluator:
         self.min_paragraph_count = self.quality_config.get('min_paragraph_count', 5)
         self.quality_threshold = self.quality_config.get('threshold', 70)
         
+        # 设置版权保护参数
+        self.copyright_protection = self.config.get('copyright_protection', {})
+        self.forbidden_terms = self.copyright_protection.get('forbidden_terms', [])
+        self.detect_brand_names = self.copyright_protection.get('detect_brand_names', True)
+        
         # 设置日志
         logging.basicConfig(
             level=logging.INFO,
@@ -59,6 +64,9 @@ class ContentEvaluator:
         # 计算段落数量
         paragraph_count = self._count_paragraphs(content)
         
+        # 检测版权问题
+        copyright_issues = self._detect_copyright_issues(content, original_content)
+        
         # 计算总体质量分数
         quality_score = self._calculate_quality_score(
             readability_score,
@@ -68,7 +76,19 @@ class ContentEvaluator:
         )
         
         # 判断是否需要重写
-        needs_rewrite = quality_score < self.quality_threshold
+        needs_rewrite = quality_score < self.quality_threshold or copyright_issues['has_issues']
+        
+        # 获取质量建议
+        quality_suggestions = self._get_quality_suggestions(
+            readability_score,
+            originality_score,
+            avg_sentence_length,
+            paragraph_count
+        )
+        
+        # 合并版权问题建议
+        if copyright_issues['has_issues']:
+            quality_suggestions.extend(copyright_issues['suggestions'])
         
         # 返回评估结果
         return {
@@ -78,13 +98,9 @@ class ContentEvaluator:
             'avg_sentence_length': avg_sentence_length,
             'paragraph_count': paragraph_count,
             'quality_score': quality_score,
+            'copyright_issues': copyright_issues['has_issues'],
             'needs_rewrite': needs_rewrite,
-            'suggestions': self._get_quality_suggestions(
-                readability_score,
-                originality_score,
-                avg_sentence_length,
-                paragraph_count
-            )
+            'suggestions': quality_suggestions
         }
     
     def _calculate_readability_score(self, content):
@@ -214,3 +230,59 @@ class ContentEvaluator:
             suggestions.append(f"段落数量较少 ({paragraph_count})，建议增加段落数量，提高文章结构性")
         
         return suggestions
+        
+    def _detect_copyright_issues(self, content, original_content=None):
+        """检测内容中的版权问题，如原网站名称、品牌信息等"""
+        issues = {
+            'has_issues': False,
+            'suggestions': []
+        }
+        
+        if not content:
+            return issues
+        
+        # 检查禁用词汇
+        for term in self.forbidden_terms:
+            if term.lower() in content.lower():
+                issues['has_issues'] = True
+                issues['suggestions'].append(f"内容中包含禁用词汇 '{term}'，请移除或替换")
+        
+        # 如果有原始内容，尝试提取和检测品牌名称
+        if original_content and self.detect_brand_names:
+            # 从原始内容中提取可能的品牌名称
+            potential_brands = self._extract_potential_brands(original_content)
+            
+            # 检查提取的品牌名称是否出现在新内容中
+            for brand in potential_brands:
+                if brand.lower() in content.lower():
+                    issues['has_issues'] = True
+                    issues['suggestions'].append(f"内容中包含原网站品牌名称 '{brand}'，请移除或替换以避免版权纠纷")
+        
+        return issues
+    
+    def _extract_potential_brands(self, content):
+        """从内容中提取可能的品牌名称"""
+        potential_brands = []
+        
+        # 从元数据中提取网站名称（如果可用）
+        # 这里简化处理，实际应用中可能需要更复杂的逻辑
+        
+        # 查找常见的品牌标识模式
+        # 例如：以 © 开头的内容、"All rights reserved by"后面的内容等
+        copyright_patterns = [
+            r'©\s*([\w\s]+)',
+            r'版权所有\s*[©]?\s*([\w\s]+)',
+            r'All rights reserved by\s+([\w\s]+)',
+            r'Powered by\s+([\w\s]+)',
+            r'([A-Z][\w]+\.com)'
+        ]
+        
+        for pattern in copyright_patterns:
+            matches = re.findall(pattern, content)
+            for match in matches:
+                brand = match.strip()
+                if brand and len(brand) > 2:  # 避免太短的匹配
+                    potential_brands.append(brand)
+        
+        # 去重
+        return list(set(potential_brands))
