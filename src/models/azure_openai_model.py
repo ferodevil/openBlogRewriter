@@ -14,6 +14,11 @@ class AzureOpenAIModel(BaseModel):
         openai.api_key = self.model_config.get('api_key', '')
         openai.api_base = self.model_config.get('endpoint', '')
         openai.api_version = self.model_config.get('api_version', '2023-05-15')
+        # 设置API配置
+        self.client = openai.OpenAI(
+            api_key=self.model_config.get('api_key', ''),
+            base_url=self.model_config.get('base_url', 'https://api.siliconflow.cn/v1')
+        )
         
         # 获取模型配置
         self.deployment_name = self.model_config.get('deployment_name', '')
@@ -33,7 +38,7 @@ class AzureOpenAIModel(BaseModel):
             for attempt in range(max_retries):
                 try:
                     system_prompt = self._get_prompt_template('rewrite_system')
-                    response = openai.ChatCompletion.create(
+                    response = self.client.chat.completions.create(
                         deployment_id=self.deployment_name,
                         messages=[
                             {"role": "system", "content": system_prompt},
@@ -98,7 +103,7 @@ class AzureOpenAIModel(BaseModel):
             for attempt in range(max_retries):
                 try:
                     system_prompt = self._get_prompt_template('seo_system')
-                    response = openai.ChatCompletion.create(
+                    response = self.client.chat.completions.create(
                         deployment_id=self.deployment_name,
                         messages=[
                             {"role": "system", "content": system_prompt},
@@ -135,7 +140,7 @@ class AzureOpenAIModel(BaseModel):
         
         try:
             system_prompt = self._get_prompt_template('seo_system')
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 deployment_id=self.deployment_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -165,7 +170,7 @@ class AzureOpenAIModel(BaseModel):
         
         try:
             system_prompt = self._get_prompt_template('seo_system')
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 deployment_id=self.deployment_name,
                 messages=[
                     {"role": "system", "content": system_prompt},

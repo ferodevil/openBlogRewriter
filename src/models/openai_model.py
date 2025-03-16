@@ -9,8 +9,11 @@ class OpenAIModel(BaseModel):
         """初始化OpenAI模型"""
         super().__init__('openai', config_path)
         
-        # 设置API密钥
-        openai.api_key = self.model_config.get('api_key', '')
+        # 设置API配置
+        self.client = openai.OpenAI(
+            api_key=self.model_config.get('api_key', ''),
+            base_url=self.model_config.get('base_url', 'https://api.siliconflow.cn/v1')
+        )
         
         # 获取模型配置
         self.model = self.model_config.get('model', 'gpt-4')
@@ -30,7 +33,7 @@ class OpenAIModel(BaseModel):
             for attempt in range(max_retries):
                 try:
                     system_prompt = self._get_prompt_template('rewrite_system')
-                    response = openai.ChatCompletion.create(
+                    response = self.client.chat.completions.create(
                         model=self.model,
                         messages=[
                             {"role": "system", "content": system_prompt},
@@ -72,7 +75,7 @@ class OpenAIModel(BaseModel):
         # 使用OpenAI API优化内容
         try:
             system_prompt = self._get_prompt_template('seo_system')
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -102,7 +105,7 @@ class OpenAIModel(BaseModel):
         
         try:
             system_prompt = self._get_prompt_template('seo_system')
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -132,7 +135,7 @@ class OpenAIModel(BaseModel):
         
         try:
             system_prompt = self._get_prompt_template('seo_system')
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
