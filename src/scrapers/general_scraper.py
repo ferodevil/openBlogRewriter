@@ -11,7 +11,9 @@ class GeneralScraper(BaseScraper):
     def __init__(self, config_path=None):
         """初始化爬虫"""
         super().__init__(config_path)
+        self.config_path = config_path  # 保存config_path
         self.config = self._load_config(config_path)
+        self.images = []
     
     def extract_content(self, url):
         """提取文章内容"""
@@ -25,6 +27,9 @@ class GeneralScraper(BaseScraper):
         
         # 使用BeautifulSoup清理HTML
         soup = BeautifulSoup(article_html, 'html.parser')
+        
+        # 提取图片
+        self.extract_images(soup, url)
         
         # 移除脚本和样式
         for script in soup(["script", "style"]):
@@ -86,3 +91,92 @@ class GeneralScraper(BaseScraper):
         except Exception as e:
             self.logger.error(f"加载配置文件失败: {e}")
             return {}
+            
+    def extract_images(self, soup, base_url):
+        """提取文章中的图片"""
+        from src.utils.image_processor import ImageProcessor
+        from urllib.parse import urljoin
+        import re
+        
+        # 初始化图片处理器
+        image_processor = ImageProcessor(self.config_path)
+        
+        # 存储所有找到的图片URL
+        image_urls = set()
+        
+        # 1. 获取所有img标签
+        for img in soup.find_all('img'):
+            # 处理src属性
+            src = img.get('src')
+            if src:
+                image_urls.add(src)
+            
+            # 处理srcset属性
+            srcset = img.get('srcset')
+            if srcset:
+                # 提取srcset中的URL
+                urls = re.findall(r'([^\s]+)(?:\s+[\d.]+[wx])?,?', srcset)
+                image_urls.update(urls)
+        
+        # 2. 获取picture标签中的source
+        for picture in soup.find_all('picture'):
+            for source in picture.find_all('source'):
+                srcset = source.get('srcset')
+                if srcset:
+                    urls = re.findall(r'([^\s]+)(?:\s+[\d.]+[wx])?,?', srcset)
+                    image_urls.update(urls)
+        
+        # 3. 查找带有background-image样式的元素
+        for tag in soup.find_all(style=True):
+            style = tag.get('style', '')
+            bg_urls = re.findall(r'background-image:\s*url\(["\']?([^\'"\)]+)["\']?\)', style)
+            image_urls.update(bg_urls)
+        
+        # 4. 处理和下载图片
+        self.logger.info(f"找到 {len(image_urls)} 张图片")
+        for url in image_urls:
+            # 处理相对路径
+            absolute_url = urljoin(base_url, url)
+            
+            # 下载图片
+            _, filename, local_path = image_processor.download_image(absolute_url, base_url)
+            if local_path:
+                # 添加到图片列表
+                self.images.append({
+                    'original_url': url,
+                    'absolute_url': absolute_url,
+                    'local_path': local_path,
+                    'filename': filename,
+                    'alt': ''
+                })
+                self.logger.info(f"已下载图片: {absolute_url} -> {local_path}")
+    
+    def scrape(self, url):
+        """爬取内容并返回结构化数据"""
+        self.logger.info(f"开始爬取: {url}")
+        self.images = []
+        
+        content = self.extract_content(url)
+        metadata = self.extract_metadata(url)
+        
+        if not content:
+            self.logger.error(f"爬取内容失败: {url}")
+            return None
+        
+        # 如果有图片，使用图片处理器将图片嵌入到内容中
+        if self.images:
+            from src.utils.image_processor import ImageProcessor
+            image_processor = ImageProcessor(self.config_path)
+            content = image_processor.embed_images_in_content(content, self.images)
+            self.logger.info(f"已将 {len(self.images)} 张图片嵌入到内容中")
+        
+        result = {
+            'url': url,
+            'content': content,
+            'metadata': metadata,
+            'images': self.images,  # 添加图片信息
+            'timestamp': self._get_timestamp()
+        }
+        
+        self.logger.info(f"爬取完成: {url}")
+        return result

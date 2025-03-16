@@ -116,16 +116,47 @@ def publish_command(args):
 def process_command(args):
     """处理命令（爬取+改写+发布）"""
     logger = get_logger(__name__, args.verbose, "cli")
-    logger.info(f"处理URL: {args.url}")
     
-    success = process_blog(args.url, args.model, args.publish, args.config)
-    
-    if success:
-        logger.info("处理完成")
-        return 0
+    # 如果提供了CSV文件，从文件中读取URL列表
+    if args.csv:
+        import csv
+        urls = []
+        try:
+            with open(args.csv, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                next(reader)  # 跳过标题行
+                for row in reader:
+                    if row and row[0].strip():
+                        urls.append(row[0].strip())
+            logger.info(f"从CSV文件加载了 {len(urls)} 个URL")
+        except Exception as e:
+            logger.error(f"读取CSV文件失败: {e}")
+            return 1
     else:
-        logger.error("处理失败")
-        return 1
+        # 否则使用命令行参数中的URL
+        urls = [args.url]
+    
+    # 处理每个URL
+    success_count = 0
+    for i, url in enumerate(urls):
+        logger.info(f"处理第 {i+1}/{len(urls)} 个URL: {url}")
+        
+        success = process_blog(url, args.publish, args.config, args.max_iterations)
+        
+        if success:
+            logger.info(f"URL处理成功: {url}")
+            success_count += 1
+        else:
+            logger.error(f"URL处理失败: {url}")
+        
+        # 如果不是最后一个URL，添加延迟
+        if i < len(urls) - 1:
+            logger.info(f"等待 {args.delay} 秒后处理下一个URL...")
+            import time
+            time.sleep(args.delay)
+    
+    logger.info(f"批量处理完成，成功: {success_count}/{len(urls)}")
+    return 0 if success_count == len(urls) else 1
 
 def load_config(config_path=None):
     """加载配置文件"""
@@ -160,9 +191,12 @@ def main():
     process_parser = subparsers.add_parser('process', help='完整处理（爬取+改写+发布）')
     process_parser.add_argument('url', help='博客URL')
     process_parser.add_argument('--model', '-m', default='openai', 
-                               choices=['openai', 'azure_openai', 'anthropic', 'baidu', 'ollama'], 
+                               choices=['openai', 'azure_openai', 'anthropic', 'baidu', 'ollama', 'siliconflow'], 
                                help='使用的大模型')
     process_parser.add_argument('--publish', '-p', action='store_true', help='是否发布到WordPress')
+    process_parser.add_argument('--csv', help='包含多个URL的CSV文件路径')
+    process_parser.add_argument('--delay', type=int, default=5, help='处理多个URL时的延迟时间（秒）')
+    process_parser.add_argument('--max-iterations', type=int, default=3, help='SEO优化最大迭代次数')
     
     args = parser.parse_args()
     

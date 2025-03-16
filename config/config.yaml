@@ -1,16 +1,108 @@
 # 路径配置
 paths:
-  base_dir: "./config"  # 基础目录，使用当前项目目录
-  data_dir: "./config/data"  # 数据目录
-  log_dir: "./config/logs"  # 日志目录
+  base_dir: "."  # 基础目录，使用当前项目目录
+  data_dir: "./data"  # 数据目录
+  log_dir: "./logs"  # 日志目录
+
+# 命令行配置
+cli:
+  blog_urls: 
+    - "https://kinobjects.com/blogs/news/the-best-holiday-incense-to-greet-your-guests-and-soothe-your-stress-for-thanksgiving-christmas-lunar-new-year-and-more"  # 要采集的博客URL列表
+  publish: false  # 是否发布到WordPress
+  max_iterations: 3  # SEO优化最大迭代次数
 
 # 爬虫配置
 scrapers:
+  # 默认爬虫类型，可选值：general, crawl4ai
+  default_scraper: "crawl4ai"
   timeout: 30
   user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
   headers:
     Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
     Accept-Language: "zh-CN,zh;q=0.9,en;q=0.8"
+
+# crawl4ai 爬虫配置
+crawl4ai:
+  # 是否排除外部图片
+  exclude_external_images: false
+  # 内容类型，可选值：article, blog, news, product, etc.
+  content_type: "article"
+  # 字数阈值，低于此值的内容将被忽略
+  word_count_threshold: 100
+  # 是否只提取文本
+  only_text: false
+  # 是否保留data属性
+  keep_data_attributes: true
+  # 是否移除表单
+  remove_forms: true
+  # 是否扫描整个页面
+  scan_full_page: true
+  # 是否使用魔法模式（自动处理弹窗等）
+  magic: true
+  # 是否排除社交媒体链接
+  exclude_social_media_links: true
+  # 是否排除外部链接
+  exclude_external_links: true
+  # 需要移除的选择器
+  remove_selectors:
+    - "nav"
+    - "footer"
+    - ".header"
+    - ".footer"
+    - ".sidebar"
+    - ".navigation"
+    - ".menu"
+    - ".ads"
+    - ".advertisement"
+    - ".social-share"
+    - ".related-posts"
+    - ".comments"
+    - ".cookie-banner"
+    - "#shopify-section-header"
+    - "#shopify-section-footer"
+    - ".product-recommendations"
+  # 需要跳过的关键词
+  skip_keywords:
+    - "Save up to"
+    - "Free Shipping"
+    - "Shop All"
+    - "Browse"
+    - "Getting Started"
+    - "Sale"
+    - "GIFTING"
+    - "collection"
+    - "Add to cart"
+    - "View all"
+    - "Subscribe"
+    - "Newsletter"
+    - "Sign up"
+    - "Follow us"
+    - "Facebook"
+    - "Twitter"
+    - "Instagram"
+    - "Pinterest"
+    - "Copyright"
+    - "Terms of Service"
+    - "Privacy Policy"
+    - "Refund Policy"
+    - "Shopping Cart"
+    - "Your Cart is Empty"
+    - "Subtotal"
+    - "currency"
+    - "Leave a comment"
+    - "Comments will be approved"
+    - "Name *"
+    - "Email *"
+    - "Comment *"
+    - "Related Blog Posts"
+    - "Footer menu"
+
+# 图片处理配置
+image_processing:
+  download_images: true  # 是否下载原始图片
+  save_dir: "./data/images"  # 图片保存目录
+  rewrite_images: false  # 是否使用AI改写图片
+  embed_images: true  # 是否将图片嵌入到优化后的博客中
 
 # 大模型配置
 models:
@@ -66,12 +158,6 @@ wordpress:
   categories: [1, 2]  # 分类ID
   tags: [3, 4]  # 标签ID
   status: "draft"  # draft, publish, private
-
-# 命令行配置
-cli:
-  blog_url: "https://kinobjects.com/blogs/news/the-best-holiday-incense-to-greet-your-guests-and-soothe-your-stress-for-thanksgiving-christmas-lunar-new-year-and-more"  # 要采集的博客URL
-  publish: false  # 是否发布到WordPress
-  max_iterations: 3  # SEO优化最大迭代次数
 
 # SEO配置
 seo:

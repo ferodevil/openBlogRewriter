@@ -25,8 +25,18 @@ class FileHandler:
         )
         self.logger = logging.getLogger(__name__)
     
-    def save_content(self, content, filename=None, subfolder=None):
-        """保存内容到文件"""
+    def save_content(self, content, filename=None, subfolder=None, file_format='md'):
+        """保存内容到文件
+        
+        Args:
+            content (str): 要保存的内容
+            filename (str, optional): 文件名。如果为None，将使用时间戳生成
+            subfolder (str, optional): 子文件夹名。如果为None，将保存到基础目录
+            file_format (str, optional): 文件格式，默认为'md'(Markdown)，也可以是'txt'等
+            
+        Returns:
+            str: 保存的文件路径，如果保存失败则返回None
+        """
         try:
             # 确定保存路径
             if subfolder:
@@ -38,11 +48,11 @@ class FileHandler:
             # 如果没有提供文件名，使用时间戳生成
             if not filename:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                filename = f"content_{timestamp}.txt"
+                filename = f"content_{timestamp}.{file_format}"
             
             # 确保文件名有扩展名
             if not os.path.splitext(filename)[1]:
-                filename += '.txt'
+                filename += f'.{file_format}'
             
             # 完整文件路径
             file_path = os.path.join(save_dir, filename)
@@ -57,6 +67,20 @@ class FileHandler:
         except Exception as e:
             self.logger.error(f"保存内容失败: {e}")
             return None
+    
+    def _load_config(self, config_path=None):
+        """加载配置文件"""
+        from src.utils.path_utils import get_config_path
+        
+        if config_path is None:
+            config_path = get_config_path()
+        
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return yaml.safe_load(f)
+        except Exception as e:
+            self.logger.error(f"加载配置文件失败: {e}")
+            return {}
     
     def save_json(self, data, filename=None, subfolder=None):
         """保存JSON数据到文件"""

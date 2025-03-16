@@ -87,8 +87,9 @@ def step1_scrape_content(url, config_path, logger):
     file_handler = FileHandler()
     original_content_path = file_handler.save_content(
         blog_data['content'],
-        f"original_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-        "original"
+        f"original_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        "original",
+        file_format='md'
     )
     
     # 保存元数据
@@ -139,8 +140,9 @@ def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrit
         file_handler = FileHandler()
         rewritten_content_path = file_handler.save_content(
             rewritten_content,
-            f"rewritten_attempt{attempt+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-            "rewritten"
+            f"rewritten_attempt{attempt+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            "rewritten",
+            file_format='md'
         )
         
         quality_result_path = file_handler.save_json(
@@ -324,8 +326,9 @@ def step3_seo_optimization(content, title, description, metadata, model_name, co
     # 保存优化后的内容
     optimized_content_path = file_handler.save_content(
         optimized_content,
-        f"optimized_iter{iteration+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-        "optimized"
+        f"optimized_iter{iteration+1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        "optimized",
+        file_format='md'
     )
     
     logger.info(f"优化后的内容已保存到: {optimized_content_path}")
@@ -448,19 +451,35 @@ def main():
     config = load_config(config_path)
     cli_config = config.get('cli', {})
     
-    # 从配置文件获取URL和其他参数
-    blog_url = cli_config.get('blog_url', '')
-    if not blog_url:
-        print("错误: 配置文件中未设置blog_url参数")
+    # 从配置文件获取URL列表和其他参数
+    blog_urls = cli_config.get('blog_urls', [])
+    if not blog_urls:
+        print("错误: 配置文件中未设置blog_urls参数或参数为空")
         return
     
-    # 使用配置文件中的参数
-    process_blog(
-        blog_url,
-        cli_config.get('publish', False),
-        config_path,
-        cli_config.get('max_iterations', 3)
-    )
+    # 处理每个URL
+    for i, url in enumerate(blog_urls):
+        print(f"\n处理第 {i+1}/{len(blog_urls)} 个URL: {url}")
+        
+        # 使用配置文件中的参数处理当前URL
+        success = process_blog(
+            url,
+            cli_config.get('publish', False),
+            config_path,
+            cli_config.get('max_iterations', 3)
+        )
+        
+        if success:
+            print(f"URL处理成功: {url}")
+        else:
+            print(f"URL处理失败: {url}")
+        
+        # 如果不是最后一个URL，添加延迟
+        if i < len(blog_urls) - 1:
+            delay = cli_config.get('delay_between_urls', 5)
+            print(f"等待 {delay} 秒后处理下一个URL...")
+            import time
+            time.sleep(delay)
 
 if __name__ == "__main__":
     main()

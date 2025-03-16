@@ -10,8 +10,10 @@ class SiliconFlowModel(BaseModel):
         super().__init__('siliconflow', config_path)
         
         # 设置API配置
-        openai.api_key = self.model_config.get('api_key', '')
-        openai.api_base = self.model_config.get('base_url', 'https://api.siliconflow.cn/v1')
+        self.client = openai.OpenAI(
+            api_key=self.model_config.get('api_key', ''),
+            base_url=self.model_config.get('base_url', 'https://api.siliconflow.cn/v1')
+        )
         
         # 获取模型配置
         self.model = self.model_config.get('model', 'Qwen/QwQ-32B')
@@ -38,7 +40,7 @@ class SiliconFlowModel(BaseModel):
                 try:
                     self.logger.debug(f"尝试API调用 (第{attempt+1}次)")
                     system_prompt = self._get_prompt_template('rewrite_system')
-                    response = openai.ChatCompletion.create(
+                    response = self.client.chat.completions.create(
                         model=self.model,
                         messages=[
                             {"role": "system", "content": system_prompt},
@@ -51,7 +53,7 @@ class SiliconFlowModel(BaseModel):
                     self.logger.info("内容重写成功")
                     return response.choices[0].message.content.strip()
                 
-                except (openai.error.RateLimitError, openai.error.APIError, openai.error.ServiceUnavailableError) as e:
+                except (openai.RateLimitError, openai.APIError, openai.APIConnectionError) as e:
                     if attempt < max_retries - 1:
                         self.logger.warning(f"API调用失败，正在重试 ({attempt+1}/{max_retries}): {e}")
                         time.sleep(retry_delay)
@@ -105,7 +107,7 @@ class SiliconFlowModel(BaseModel):
             for attempt in range(max_retries):
                 try:
                     system_prompt = self._get_prompt_template('seo_system')
-                    response = openai.ChatCompletion.create(
+                    response = self.client.chat.completions.create(
                         model=self.model,
                         messages=[
                             {"role": "system", "content": system_prompt},
@@ -117,7 +119,7 @@ class SiliconFlowModel(BaseModel):
                     
                     return response.choices[0].message.content.strip()
                 
-                except (openai.error.RateLimitError, openai.error.APIError, openai.error.ServiceUnavailableError) as e:
+                except (openai.RateLimitError, openai.APIError, openai.APIConnectionError) as e:
                     if attempt < max_retries - 1:
                         self.logger.warning(f"API调用失败，正在重试 ({attempt+1}/{max_retries}): {e}")
                         time.sleep(retry_delay)
@@ -141,7 +143,7 @@ class SiliconFlowModel(BaseModel):
         
         try:
             system_prompt = self._get_prompt_template('seo_system')
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -171,7 +173,7 @@ class SiliconFlowModel(BaseModel):
         
         try:
             system_prompt = self._get_prompt_template('seo_system')
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
