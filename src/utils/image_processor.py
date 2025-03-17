@@ -2,6 +2,8 @@ import os
 import requests
 import logging
 import uuid
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
 from io import BytesIO
 from urllib.parse import urlparse, urljoin
@@ -213,27 +215,123 @@ class ImageProcessor:
         if not self.image_config.get('embed_images', True) or not images:
             return content
         
-        # 构建图片引用
-        image_references = "\n\n## 图片引用\n\n"
-        for i, img in enumerate(images):
-            # 使用相对路径
-            relative_path = os.path.relpath(img['local_path'], os.path.dirname(self.save_dir))
-            relative_path = relative_path.replace('\\', '/')
-            
-            # 获取图片说明文本
-            alt_text = img.get('alt_text', '')
-            title = img.get('title', '')
-            caption = alt_text or title or f"图片{i+1}"
-            
-            # 添加图片引用，包含标题和尺寸信息
-            width = img.get('width', '')
-            height = img.get('height', '')
-            size_info = f" ({width}x{height})" if width and height else ""
-            
-            image_references += f"![{caption}]({relative_path} \"{caption}{size_info}\")\n\n"
+        # 限制图片数量，最多使用5张图片
+        max_images = self.image_config.get('max_images', 5)
+        if len(images) > max_images:
+            self.logger.info(f"图片数量超过限制，将只使用前 {max_images} 张图片")
+            images = images[:max_images]
         
-        # 将图片引用添加到内容末尾
-        return content + image_references
+        # 检查内容中是否有[IMAGE]标记
+        if '[IMAGE]' in content:
+            # 如果有[IMAGE]标记，按顺序替换为图片
+            image_index = 0
+            lines = content.split('\n')
+            result_lines = []
+            
+            for line in lines:
+                if '[IMAGE]' in line and image_index < len(images):
+                    # 替换[IMAGE]标记为图片引用
+                    img = images[image_index]
+                    alt_text = img.get('alt_text', '')
+                    title = img.get('title', '')
+                    caption = alt_text or title or f"图片{image_index+1}"
+                    
+                    # 使用相对路径
+                    relative_path = os.path.relpath(img['local_path'], os.path.dirname(self.save_dir))
+                    relative_path = relative_path.replace('\\', '/')
+                    
+                    # 添加图片引用，包含标题和尺寸信息
+                    width = img.get('width', '')
+                    height = img.get('height', '')
+                    size_info = f" ({width}x{height})" if width and height else ""
+                    
+                    image_reference = f"![{caption}]({relative_path} \"{caption}{size_info}\")"
+                    
+                    # 替换标记
+                    line = line.replace('[IMAGE]', image_reference)
+                    image_index += 1
+                
+                result_lines.append(line)
+            
+            return '\n'.join(result_lines)
+        else:
+            # 如果没有[IMAGE]标记，智能插入图片
+            # 将内容分段
+            paragraphs = content.split('\n\n')
+            result_paragraphs = []
+            
+            # 计算图片应该插入的位置
+            total_paragraphs = len(paragraphs)
+            if total_paragraphs <= 1:
+                # 如果内容太少，直接在末尾添加图片
+                result_paragraphs = paragraphs
+                image_positions = [0]  # 在末尾添加所有图片
+            else:
+                # 确保图片均匀分布在文章中
+                result_paragraphs = paragraphs
+                
+                # 跳过第一段（通常是标题或介绍）
+                usable_paragraphs = max(1, total_paragraphs - 1)
+                
+                # 计算图片插入位置
+                image_positions = []
+                if len(images) == 1:
+                    # 如果只有一张图片，放在文章1/3处
+                    image_positions = [max(1, total_paragraphs // 3)]
+                elif len(images) == 2:
+                    # 如果有两张图片，分别放在1/3和2/3处
+                    image_positions = [max(1, total_paragraphs // 3), max(2, 2 * total_paragraphs // 3)]
+                else:
+                    # 如果有多张图片，均匀分布
+                    step = max(1, usable_paragraphs // (len(images) + 1))
+                    image_positions = [min(total_paragraphs - 1, 1 + i * step) for i in range(len(images))]
+            
+            # 插入图片
+            result = []
+            for i, para in enumerate(result_paragraphs):
+                result.append(para)
+                
+                # 检查是否需要在此处插入图片
+                if i in image_positions:
+                    img_index = image_positions.index(i)
+                    if img_index < len(images):
+                        img = images[img_index]
+                        alt_text = img.get('alt_text', '')
+                        title = img.get('title', '')
+                        caption = alt_text or title or f"图片{img_index+1}"
+                        
+                        # 使用相对路径
+                        relative_path = os.path.relpath(img['local_path'], os.path.dirname(self.save_dir))
+                        relative_path = relative_path.replace('\\', '/')
+                        
+                        # 添加图片引用，包含标题和尺寸信息
+                        width = img.get('width', '')
+                        height = img.get('height', '')
+                        size_info = f" ({width}x{height})" if width and height else ""
+                        
+                        result.append(f"![{caption}]({relative_path} \"{caption}{size_info}\")")
+            
+            # 如果所有图片都未插入（可能是因为image_positions为空），则在末尾添加
+            inserted_images = len([pos for pos in image_positions if pos < len(result_paragraphs)])
+            if inserted_images < len(images):
+                for i in range(inserted_images, len(images)):
+                    img = images[i]
+                    alt_text = img.get('alt_text', '')
+                    title = img.get('title', '')
+                    caption = alt_text or title or f"图片{i+1}"
+                    
+                    # 使用相对路径
+                    relative_path = os.path.relpath(img['local_path'], os.path.dirname(self.save_dir))
+                    relative_path = relative_path.replace('\\', '/')
+                    
+                    # 添加图片引用，包含标题和尺寸信息
+                    width = img.get('width', '')
+                    height = img.get('height', '')
+                    size_info = f" ({width}x{height})" if width and height else ""
+                    
+                    result.append(f"![{caption}]({relative_path} \"{caption}{size_info}\")")
+            
+            return '\n\n'.join(result)
     
     def _get_extension_from_content_type(self, content_type):
         """根据Content-Type获取文件扩展名"""

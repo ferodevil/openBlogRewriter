@@ -53,7 +53,8 @@ def process_blog(url, publish=False, config_path=None, max_iterations=3):
         config, 
         config_path, 
         logger,
-        max_iterations=max_iterations
+        max_iterations=max_iterations,
+        images=rewrite_result.get('images', [])
     )
     if not seo_result:
         return False
@@ -65,7 +66,8 @@ def process_blog(url, publish=False, config_path=None, max_iterations=3):
             seo_result['content'],
             seo_result['description'],
             config_path,
-            logger
+            logger,
+            images=seo_result.get('images', [])
         )
         if not publish_result:
             return False
@@ -99,6 +101,17 @@ def step1_scrape_content(url, config_path, logger):
         "metadata"
     )
     
+    # 保存图片信息（如果有）
+    images_info = blog_data.get('images', [])
+    if images_info:
+        images_info_path = file_handler.save_json(
+            images_info,
+            f"images_info_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            "images"
+        )
+        logger.info(f"图片信息已保存到: {images_info_path}")
+        logger.info(f"共爬取到 {len(images_info)} 张图片")
+    
     logger.info(f"原始内容已保存到: {original_content_path}")
     logger.info(f"元数据已保存到: {metadata_path}")
     
@@ -116,6 +129,11 @@ def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrit
     seo_description = None
     quality_result = {'suggestions': []}
     
+    # 获取图片信息
+    images = blog_data.get('images', [])
+    if images:
+        logger.info(f"博客包含 {len(images)} 张图片，将在重写后嵌入")
+    
     for attempt in range(max_rewrite_attempts):
         # 构建提示词
         prompt = generate_rewrite_prompt(original_content, blog_data['metadata'])
@@ -123,6 +141,10 @@ def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrit
             logger.info(f"第{attempt+1}次尝试改写内容")
             # 如果是重写，添加上一次的质量评估建议
             prompt += "\n\n上一次改写的问题：\n" + "\n".join(quality_result.get('suggestions', []))
+        
+        # 如果有图片，在提示词中添加图片信息
+        if images and "image" not in prompt.lower():
+            prompt += f"\n\nNote: The original content contains {len(images)} images. Please consider these images while rewriting and add image reference tags [IMAGE] at appropriate positions where you want to insert images. For example, if you want to insert an image after a paragraph, add [IMAGE] on a new line after that paragraph."
         
         logger.info(f"生成的改写提示词: {prompt[:100]}...")
         
@@ -135,6 +157,13 @@ def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrit
         
         # 评估内容质量
         quality_result = content_evaluator.evaluate_content(rewritten_content, original_content)
+        
+        # 如果有图片，嵌入到重写后的内容中
+        if images:
+            from src.utils.image_processor import ImageProcessor
+            image_processor = ImageProcessor(config_path)
+            rewritten_content = image_processor.embed_images_in_content(rewritten_content, images)
+            logger.info(f"已将 {len(images)} 张图片嵌入到重写后的内容中")
         
         # 保存改写后的内容和质量评估结果
         file_handler = FileHandler()
@@ -166,7 +195,8 @@ def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrit
                 'content': rewritten_content,
                 'title': seo_title,
                 'description': seo_description,
-                'quality_result': quality_result
+                'quality_result': quality_result,
+                'images': images  # 添加图片信息到返回结果
             }
         
         if attempt < max_rewrite_attempts - 1:
@@ -183,10 +213,11 @@ def step2_rewrite_content(blog_data, model_name, config_path, logger, max_rewrit
         'content': rewritten_content,
         'title': seo_title,
         'description': seo_description,
-        'quality_result': quality_result
+        'quality_result': quality_result,
+        'images': images  # 添加图片信息到返回结果
     }
 
-def step3_seo_optimization(content, title, description, metadata, model_name, config, config_path, logger, iteration=0, max_iterations=3):
+def step3_seo_optimization(content, title, description, metadata, model_name, config, config_path, logger, iteration=0, max_iterations=3, images=None):
     """步骤3: SEO分析和内容优化
     
     对改写后的内容进行SEO分析和优化，通过迭代方式不断提升内容的SEO表现
@@ -351,13 +382,19 @@ def step3_seo_optimization(content, title, description, metadata, model_name, co
         config_path,  # 配置文件路径
         logger,  # 日志记录器
         iteration + 1,  # 迭代次数加1
-        max_iterations  # 最大迭代次数
+        max_iterations,  # 最大迭代次数
+        images  # 传递图片信息
     )
 
-def step4_publish_content(title, content, description, config_path, logger):
+def step4_publish_content(title, content, description, config_path, logger, images=None):
     """步骤4: 发布到WordPress"""
     logger.info("步骤4: 发布到WordPress")
     publisher = WordPressPublisher(config_path)
+    
+    # 如果有图片，确保它们已经嵌入到内容中
+    if images and len(images) > 0:
+        logger.info(f"准备发布包含 {len(images)} 张图片的文章")
+        # 图片已经在前面步骤中嵌入到内容中，这里不需要额外处理
     
     result = publisher.publish_post(
         title=title,

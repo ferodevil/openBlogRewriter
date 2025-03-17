@@ -494,13 +494,82 @@ class Crawl4AIScraper(BaseScraper):
         # 线程安全的图片列表
         images_lock = threading.Lock()
         
+        # 从配置中获取最大图片数量，默认为5张
+        max_images = self.crawl4ai_config.get('max_images', 5)
+        
+        # 过滤图片，只保留正文中的相关图片
+        content_images = []
+        for img in images:
+            # 跳过小图标和装饰性图片
+            if 'width' in img and 'height' in img:
+                if int(img.get('width', 0)) < 100 or int(img.get('height', 0)) < 100:
+                    continue
+            
+            # 检查图片是否在正文中
+            is_in_content = False
+            
+            # 检查图片是否有content_node属性，表示它在正文中
+            if img.get('content_node', False):
+                is_in_content = True
+            
+            # 检查图片的父元素是否为正文相关元素
+            parent_tag = img.get('parent_tag', '').lower()
+            if parent_tag in ['p', 'div', 'article', 'section', 'main', 'figure']:
+                is_in_content = True
+            
+            # 检查图片是否有意义的alt文本或标题
+            has_meaningful_text = False
+            alt_text = img.get('alt', '')
+            title = img.get('title', '')
+            if alt_text and len(alt_text.strip()) > 3:
+                has_meaningful_text = True
+            if title and len(title.strip()) > 3:
+                has_meaningful_text = True
+            
+            # 检查图片是否有合理的尺寸
+            has_reasonable_size = False
+            if 'width' in img and 'height' in img:
+                width = int(img.get('width', 0))
+                height = int(img.get('height', 0))
+                if width >= 200 and height >= 200:
+                    has_reasonable_size = True
+            
+            # 如果图片在正文中，或者有意义的文本或合理的尺寸，认为它是正文中的图片
+            if is_in_content or has_meaningful_text or has_reasonable_size:
+                content_images.append(img)
+        
+        # 限制图片数量，最多处理max_images张图片
+        if len(content_images) > max_images:
+            # 根据图片质量和相关性排序
+            # 优先选择有意义的alt文本、合理尺寸的图片
+            def image_score(img):
+                score = 0
+                # 有意义的alt文本或标题加分
+                alt_text = img.get('alt', '')
+                title = img.get('title', '')
+                if alt_text and len(alt_text.strip()) > 3:
+                    score += 3
+                if title and len(title.strip()) > 3:
+                    score += 2
+                # 合理尺寸加分
+                if 'width' in img and 'height' in img:
+                    width = int(img.get('width', 0))
+                    height = int(img.get('height', 0))
+                    if width >= 400 and height >= 400:
+                        score += 3
+                    elif width >= 300 and height >= 300:
+                        score += 2
+                    elif width >= 200 and height >= 200:
+                        score += 1
+                return score
+            
+            # 按分数排序并取前max_images张
+            content_images = sorted(content_images, key=image_score, reverse=True)[:max_images]
+        
+        self.logger.info(f"从 {len(images)} 张图片中筛选出 {len(content_images)} 张正文相关图片，将处理 {min(len(content_images), max_images)} 张")
+        
         def process_single_image(img):
             try:
-                # 跳过小图标和装饰性图片
-                if 'width' in img and 'height' in img:
-                    if int(img.get('width', 0)) < 100 or int(img.get('height', 0)) < 100:
-                        return None
-                
                 img_url = img['src']
                 # 下载图片
                 img_content, filename, local_path = self.image_processor.download_image(img_url, base_url)
@@ -513,7 +582,8 @@ class Crawl4AIScraper(BaseScraper):
                         'alt_text': img.get('alt', ''),
                         'title': img.get('title', ''),
                         'width': img.get('width', ''),
-                        'height': img.get('height', '')
+                        'height': img.get('height', ''),
+                        'position': img.get('position', 0)  # 记录图片在文章中的位置
                     }
                     
                     # 线程安全地添加到图片列表
@@ -527,10 +597,10 @@ class Crawl4AIScraper(BaseScraper):
                 return None
         
         # 使用线程池并发处理图片
-        max_workers = min(len(images), self.crawl4ai_config.get('max_concurrent_downloads', 5))
+        max_workers = min(len(content_images), self.crawl4ai_config.get('max_concurrent_downloads', 5))
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 提交所有下载任务
-            futures = [executor.submit(process_single_image, img) for img in images]
+            futures = [executor.submit(process_single_image, img) for img in content_images]
             
             # 等待所有任务完成
             concurrent.futures.wait(futures)
@@ -547,17 +617,85 @@ class Crawl4AIScraper(BaseScraper):
         # 如果没有图片，直接返回原内容
         if not self.images:
             return content
-        
-        # 构建图片引用
-        image_references = "\n\n## 图片引用\n\n"
-        for i, img in enumerate(self.images):
-            alt_text = img.get('alt_text', f"图片{i+1}")
-            if not alt_text.strip():
-                alt_text = f"图片{i+1}"
             
-            # 使用相对路径
-            rel_path = os.path.join('images', img['filename'])
-            image_references += f"![{alt_text}]({rel_path})\n\n"
-        
-        # 将图片引用添加到内容末尾
-        return content + image_references
+        # 检查内容中是否有[IMAGE]标记
+        if '[IMAGE]' in content:
+            # 如果有[IMAGE]标记，按顺序替换为图片
+            image_index = 0
+            lines = content.split('\n')
+            result_lines = []
+            
+            for line in lines:
+                if '[IMAGE]' in line and image_index < len(self.images):
+                    # 替换[IMAGE]标记为图片引用
+                    img = self.images[image_index]
+                    alt_text = img.get('alt_text', f"图片{image_index+1}")
+                    if not alt_text.strip():
+                        alt_text = f"图片{image_index+1}"
+                    
+                    # 使用相对路径
+                    rel_path = os.path.join('images', img['filename'])
+                    image_reference = f"![{alt_text}]({rel_path})"
+                    
+                    # 替换标记
+                    line = line.replace('[IMAGE]', image_reference)
+                    image_index += 1
+                
+                result_lines.append(line)
+            
+            # 如果还有未使用的图片，添加到内容末尾
+            if image_index < len(self.images):
+                result_lines.append("\n## 其他图片\n")
+                for i in range(image_index, len(self.images)):
+                    img = self.images[i]
+                    alt_text = img.get('alt_text', f"图片{i+1}")
+                    if not alt_text.strip():
+                        alt_text = f"图片{i+1}"
+                    
+                    # 使用相对路径
+                    rel_path = os.path.join('images', img['filename'])
+                    result_lines.append(f"![{alt_text}]({rel_path})\n")
+            
+            return '\n'.join(result_lines)
+        else:
+            # 如果没有[IMAGE]标记，尝试智能插入图片
+            # 将内容分段
+            paragraphs = content.split('\n\n')
+            result_paragraphs = []
+            images_per_section = max(1, len(self.images) // max(1, len(paragraphs) - 2))
+            image_index = 0
+            
+            # 跳过第一段（通常是标题或介绍）
+            if paragraphs:
+                result_paragraphs.append(paragraphs[0])
+            
+            # 在段落之间插入图片
+            for i in range(1, len(paragraphs)):
+                result_paragraphs.append(paragraphs[i])
+                
+                # 每隔几个段落插入一张图片
+                if i % 3 == 0 and image_index < len(self.images):
+                    img = self.images[image_index]
+                    alt_text = img.get('alt_text', f"图片{image_index+1}")
+                    if not alt_text.strip():
+                        alt_text = f"图片{image_index+1}"
+                    
+                    # 使用相对路径
+                    rel_path = os.path.join('images', img['filename'])
+                    result_paragraphs.append(f"![{alt_text}]({rel_path})")
+                    image_index += 1
+            
+            # 如果还有未使用的图片，添加到内容末尾
+            if image_index < len(self.images):
+                result_paragraphs.append("\n## 其他图片\n")
+                for i in range(image_index, len(self.images)):
+                    img = self.images[i]
+                    alt_text = img.get('alt_text', f"图片{i+1}")
+                    if not alt_text.strip():
+                        alt_text = f"图片{i+1}"
+                    
+                    # 使用相对路径
+                    rel_path = os.path.join('images', img['filename'])
+                    result_paragraphs.append(f"![{alt_text}]({rel_path})")
+            
+            return '\n\n'.join(result_paragraphs)
