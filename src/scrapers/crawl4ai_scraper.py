@@ -4,7 +4,7 @@ import re
 import json
 import logging
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 from datetime import datetime
 
@@ -84,9 +84,9 @@ class Crawl4AIScraper(BaseScraper):
                 # 提取元数据
                 metadata = self._extract_metadata_from_result(result)
                 
-                # 处理图片
+                # 处理图片，传递清理后的内容用于过滤
                 if hasattr(result, 'media') and 'images' in result.media:
-                    self._process_images(result.media['images'], url)
+                    self._process_images(result.media['images'], url, content)
                 
                 # 构建结果
                 scrape_result = {
@@ -477,12 +477,13 @@ class Crawl4AIScraper(BaseScraper):
         
         return metadata
     
-    def _process_images(self, images, base_url):
+    def _process_images(self, images, base_url, cleaned_content=None):
         """处理图片
         
         Args:
             images (list): crawl4ai提取的图片列表
             base_url (str): 基础URL
+            cleaned_content (str, optional): 已清理的正文内容，用于判断图片是否在正文中
         """
         import concurrent.futures
         import threading
@@ -500,43 +501,22 @@ class Crawl4AIScraper(BaseScraper):
         # 过滤图片，只保留正文中的相关图片
         content_images = []
         for img in images:
-            # 跳过小图标和装饰性图片
-            if 'width' in img and 'height' in img:
-                if int(img.get('width', 0)) < 100 or int(img.get('height', 0)) < 100:
-                    continue
-            
-            # 检查图片是否在正文中
-            is_in_content = False
-            
-            # 检查图片是否有content_node属性，表示它在正文中
-            if img.get('content_node', False):
-                is_in_content = True
-            
-            # 检查图片的父元素是否为正文相关元素
-            parent_tag = img.get('parent_tag', '').lower()
-            if parent_tag in ['p', 'div', 'article', 'section', 'main', 'figure']:
-                is_in_content = True
-            
-            # 检查图片是否有意义的alt文本或标题
-            has_meaningful_text = False
-            alt_text = img.get('alt', '')
-            title = img.get('title', '')
-            if alt_text and len(alt_text.strip()) > 3:
-                has_meaningful_text = True
-            if title and len(title.strip()) > 3:
-                has_meaningful_text = True
-            
-            # 检查图片是否有合理的尺寸
-            has_reasonable_size = False
-            if 'width' in img and 'height' in img:
-                width = int(img.get('width', 0))
-                height = int(img.get('height', 0))
-                if width >= 200 and height >= 200:
-                    has_reasonable_size = True
-            
-            # 如果图片在正文中，或者有意义的文本或合理的尺寸，认为它是正文中的图片
-            if is_in_content or has_meaningful_text or has_reasonable_size:
-                content_images.append(img)
+            # 检查图片URL是否在清理后的内容中出现
+            if cleaned_content and 'src' in img:
+                img_url = img['src']
+                # 处理相对路径
+                if img_url.startswith('/'):
+                    parsed_base_url = urlparse(base_url)
+                    domain = f"{parsed_base_url.scheme}://{parsed_base_url.netloc}"
+                    img_url = domain + img_url
+                elif img_url.startswith('./') or not (img_url.startswith('http://') or img_url.startswith('https://')):
+                    img_url = urljoin(base_url, img_url)
+                
+                # 检查URL或文件名是否在内容中出现
+                img_filename = os.path.basename(urlparse(img_url).path)
+                if img_url in cleaned_content or img_filename in cleaned_content:
+                    content_images.append(img)
+                    self.logger.info(f"图片URL在清理后的内容中找到: {img_url}")
         
         # 限制图片数量，最多处理max_images张图片
         if len(content_images) > max_images:
