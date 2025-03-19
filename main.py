@@ -197,8 +197,6 @@ def step2_rewrite_and_optimize_content(blog_data, model_name, config, config_pat
             "evaluation"
         )
        
-        import pdb
-        pdb.set_trace()
         logger.info(f"改写后的内容已保存到: {rewritten_content_path}")
         logger.info(f"评估结果已保存到: {evaluation_path}")
         logger.info(f"内容质量评分: {quality_result.get('quality_score', 0)}")
