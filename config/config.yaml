@@ -136,10 +136,10 @@ models:
     
   # Ollama本地模型配置
   ollama:
-    base_url: "http://localhost:11434"  # Ollama API地址
-    model: "llama2"                     # 使用的模型名称
+    base_url: "http://172.28.109.10:11434"  # Ollama API地址
+    model: "qwq:latest"                     # 使用的模型名称
     temperature: 0.7                    # 温度参数
-    max_tokens: 2000                    # 最大生成令牌数
+    max_tokens: 4096                    # 最大生成令牌数
     
   # 硅基流动API配置
   siliconflow:

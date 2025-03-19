@@ -100,9 +100,14 @@ class SEOAnalyzer:
         # 内部链接有助于建立网站结构，提高页面间的关联性，便于搜索引擎爬取
         internal_links_count = len(re.findall(r'<a\s+[^>]*href=["\'][^"\'>]*["\'][^>]*>', content, re.IGNORECASE))
         
-        # 分析图片数量 - SEO标准：至少包含1张图片(默认)
-        # 图片可以增加用户体验，同时通过alt标签提供额外的关键词信息
-        images_count = len(re.findall(r'<img\s+[^>]*src=["\'][^"\'>]*["\'][^>]*>', content, re.IGNORECASE))
+        # 修改：改进图片计数逻辑，同时支持HTML和Markdown格式
+        # 原代码只检测HTML图片标签
+        html_images_count = len(re.findall(r'<img\s+[^>]*src=["\'][^"\'>]*["\'][^>]*>', content, re.IGNORECASE))
+        markdown_images_count = len(re.findall(r'!\[.*?\]\(.*?\)', content))
+        image_tags_count = content.count('[IMAGE]')
+        
+        # 累计所有图片数量
+        total_images_count = html_images_count + markdown_images_count + image_tags_count
         
         # 分析标题标签 - SEO标准：H2标签至少2个，H3标签至少3个(默认)
         # 合理的标题结构有助于搜索引擎理解内容层次，同时提高用户阅读体验
@@ -120,8 +125,8 @@ class SEOAnalyzer:
                 'status': 'good' if internal_links_count >= self.min_internal_links else 'bad'
             },
             'images': {
-                'count': images_count,
-                'status': 'good' if images_count >= self.min_images else 'bad'
+                'count': total_images_count,
+                'status': 'good' if total_images_count >= self.min_images else 'bad'
             },
             'h2_tags': {
                 'count': h2_tags_count,

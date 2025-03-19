@@ -72,7 +72,8 @@ class ContentEvaluator:
             readability_score,
             originality_score,
             avg_sentence_length,
-            paragraph_count
+            paragraph_count,
+            content
         )
         
         # 判断是否需要重写
@@ -175,27 +176,37 @@ class ContentEvaluator:
     
     def _count_paragraphs(self, content):
         """计算段落数量"""
+        # 修改：考虑[IMAGE]标记，将其视为单独的段落
         paragraphs = content.split('\n\n')
         paragraphs = [p.strip() for p in paragraphs if p.strip()]
-        return len(paragraphs)
+        
+        # 添加[IMAGE]标记处理
+        image_tags = re.findall(r'\[IMAGE\]', content)
+        
+        return len(paragraphs) + len(image_tags)
     
-    def _calculate_quality_score(self, readability_score, originality_score, avg_sentence_length, paragraph_count):
+    def _calculate_quality_score(self, readability_score, originality_score, avg_sentence_length, paragraph_count, content):
         """计算总体质量分数"""
         # 可读性评分（30%）
-        readability_factor = 0.3 * (readability_score / self.min_readability_score * 100)
-        readability_factor = min(30, readability_factor)
+        readability_factor = 0
+        if readability_score >= self.min_readability_score:
+            readability_factor = 30
+        else:
+            readability_factor = 30 * (readability_score / self.min_readability_score)
         
-        # 原创性评分（40%）
-        originality_factor = 0.4 * (originality_score / self.min_originality_score * 100)
-        originality_factor = min(40, originality_factor)
+        # 原创性评分（30%）
+        originality_factor = 0
+        if originality_score >= self.min_originality_score:
+            originality_factor = 30
+        else:
+            originality_factor = 30 * (originality_score / self.min_originality_score)
         
-        # 句子长度评分（15%）
+        # 句子长度评分（25%）
         sentence_length_factor = 0
-        if avg_sentence_length > 0:
-            if avg_sentence_length <= self.max_avg_sentence_length:
-                sentence_length_factor = 15
-            else:
-                sentence_length_factor = 15 * (self.max_avg_sentence_length / avg_sentence_length)
+        if avg_sentence_length <= self.max_avg_sentence_length:
+            sentence_length_factor = 25
+        else:
+            sentence_length_factor = 25 * (self.max_avg_sentence_length / avg_sentence_length)
         
         # 段落数量评分（15%）
         paragraph_factor = 0
@@ -206,6 +217,13 @@ class ContentEvaluator:
         
         # 总分
         total_score = readability_factor + originality_factor + sentence_length_factor + paragraph_factor
+        
+        # 如果内容包含图片，给予额外的多媒体评分加成
+        if '[IMAGE]' in content:
+            # 图片数量评分（额外奖励5分）
+            image_count = content.count('[IMAGE]')
+            multimedia_bonus = min(5, image_count * 1)  # 每张图片奖励1分，最多5分
+            total_score += multimedia_bonus
         
         return round(min(100, total_score), 2)
     

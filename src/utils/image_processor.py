@@ -10,6 +10,7 @@ from urllib.parse import urlparse, urljoin
 from src.utils.file_handler import FileHandler
 from src.utils.path_utils import get_base_dir
 from src.models.model_factory import ModelFactory
+import re
 
 class ImageProcessor:
     """图片处理工具，用于下载、保存和处理图片"""
@@ -202,136 +203,193 @@ class ImageProcessor:
         return images
     
     def embed_images_in_content(self, content, images):
-        """将图片嵌入到内容中
+        """将图片嵌入到内容中，替换[IMAGE]标记为实际的Markdown图片引用
         
         Args:
-            content (str): 文章内容
-            images (list): 图片信息列表
+            content (str): 包含[IMAGE]标记的内容
+            images (list): 图片信息列表，每个元素应包含 path 和可选的 alt_text
             
         Returns:
-            str: 嵌入图片后的内容
+            str: 嵌入实际图片后的内容
         """
-        # 如果未启用图片嵌入或没有图片，直接返回原内容
-        if not self.image_config.get('embed_images', True) or not images:
+        if not images:
             return content
         
-        # 限制图片数量，最多使用5张图片
-        max_images = self.image_config.get('max_images', 5)
-        if len(images) > max_images:
-            self.logger.info(f"图片数量超过限制，将只使用前 {max_images} 张图片")
-            images = images[:max_images]
+        # 首先检查图片分布是否合理
+        is_distribution_good, distribution_message = self.check_image_distribution(content, len(images))
+        if not is_distribution_good:
+            self.logger.warning(f"图片分布检查: {distribution_message}")
+            # 如果图片分布不合理，重新分配图片位置
+            content = self.redistribute_images(content, len(images))
         
-        # 检查内容中是否有[IMAGE]标记
-        if '[IMAGE]' in content:
-            # 如果有[IMAGE]标记，按顺序替换为图片
-            image_index = 0
-            lines = content.split('\n')
-            result_lines = []
+        # 计算有多少[IMAGE]标记
+        image_count = content.count('[IMAGE]')
+        
+        # 确保图片数量与标记数量匹配
+        if image_count != len(images):
+            self.logger.warning(f"图片标记数量({image_count})与实际图片数量({len(images)})不匹配")
+            if image_count < len(images):
+                # 如果标记少于图片，添加额外的标记
+                content = self.redistribute_images(content, len(images))
+        
+        # 替换[IMAGE]标记为实际图片链接
+        image_index = 0
+        parts = []
+        remaining = content
+        
+        while '[IMAGE]' in remaining and image_index < len(images):
+            # 分割文本
+            before, after = remaining.split('[IMAGE]', 1)
+            parts.append(before)
             
-            for line in lines:
-                if '[IMAGE]' in line and image_index < len(images):
-                    # 替换[IMAGE]标记为图片引用
-                    img = images[image_index]
-                    alt_text = img.get('alt_text', '')
-                    title = img.get('title', '')
-                    caption = alt_text or title or f"图片{image_index+1}"
-                    
-                    # 使用相对路径
-                    relative_path = os.path.relpath(img['local_path'], os.path.dirname(self.save_dir))
-                    relative_path = relative_path.replace('\\', '/')
-                    
-                    # 添加图片引用，包含标题和尺寸信息
-                    width = img.get('width', '')
-                    height = img.get('height', '')
-                    size_info = f" ({width}x{height})" if width and height else ""
-                    
-                    image_reference = f"![{caption}]({relative_path} \"{caption}{size_info}\")"
-                    
-                    # 替换标记
-                    line = line.replace('[IMAGE]', image_reference)
-                    image_index += 1
-                
-                result_lines.append(line)
+            # 获取当前图片信息
+            image = images[image_index]
+            image_path = image.get('local_path', '')
+            alt_text = image.get('alt_text', f'图片{image_index+1}')
             
-            return '\n'.join(result_lines)
-        else:
-            # 如果没有[IMAGE]标记，智能插入图片
-            # 将内容分段
-            paragraphs = content.split('\n\n')
-            result_paragraphs = []
-            
-            # 计算图片应该插入的位置
-            total_paragraphs = len(paragraphs)
-            if total_paragraphs <= 1:
-                # 如果内容太少，直接在末尾添加图片
-                result_paragraphs = paragraphs
-                image_positions = [0]  # 在末尾添加所有图片
+            # 生成Markdown图片引用
+            # 使用相对路径并处理路径分隔符
+            if image_path:
+                image_path = image_path.replace('\\', '/')
+                # 添加实际图片引用
+                parts.append(f"\n\n![{alt_text}]({image_path})\n\n")
             else:
-                # 确保图片均匀分布在文章中
-                result_paragraphs = paragraphs
-                
-                # 跳过第一段（通常是标题或介绍）
-                usable_paragraphs = max(1, total_paragraphs - 1)
-                
-                # 计算图片插入位置
-                image_positions = []
-                if len(images) == 1:
-                    # 如果只有一张图片，放在文章1/3处
-                    image_positions = [max(1, total_paragraphs // 3)]
-                elif len(images) == 2:
-                    # 如果有两张图片，分别放在1/3和2/3处
-                    image_positions = [max(1, total_paragraphs // 3), max(2, 2 * total_paragraphs // 3)]
-                else:
-                    # 如果有多张图片，均匀分布
-                    step = max(1, usable_paragraphs // (len(images) + 1))
-                    image_positions = [min(total_paragraphs - 1, 1 + i * step) for i in range(len(images))]
+                # 如果没有图片路径，保留标记
+                parts.append('[IMAGE]')
             
-            # 插入图片
-            result = []
-            for i, para in enumerate(result_paragraphs):
-                result.append(para)
-                
-                # 检查是否需要在此处插入图片
-                if i in image_positions:
-                    img_index = image_positions.index(i)
-                    if img_index < len(images):
-                        img = images[img_index]
-                        alt_text = img.get('alt_text', '')
-                        title = img.get('title', '')
-                        caption = alt_text or title or f"图片{img_index+1}"
-                        
-                        # 使用相对路径
-                        relative_path = os.path.relpath(img['local_path'], os.path.dirname(self.save_dir))
-                        relative_path = relative_path.replace('\\', '/')
-                        
-                        # 添加图片引用，包含标题和尺寸信息
-                        width = img.get('width', '')
-                        height = img.get('height', '')
-                        size_info = f" ({width}x{height})" if width and height else ""
-                        
-                        result.append(f"![{caption}]({relative_path} \"{caption}{size_info}\")")
+            remaining = after
+            image_index += 1
+        
+        # 添加剩余部分
+        parts.append(remaining)
+        
+        # 合并所有部分
+        return ''.join(parts)
+    
+    def redistribute_images(self, content, number_of_images):
+        """重新分配图片位置，使其更适合Markdown格式
+        
+        Args:
+            content (str): 原始内容
+            number_of_images (int): 图片数量
+        
+        Returns:
+            str: 重新分配图片位置后的内容
+        """
+        # 移除现有的[IMAGE]标记
+        content_without_images = content.replace('[IMAGE]', '')
+        
+        # 使用更好的Markdown分块方法
+        blocks = self._split_markdown_blocks(content_without_images)
+        
+        if not blocks:
+            return content
+        
+        # 计算最佳图片插入位置，避开标题和不适合插入图片的位置
+        suitable_positions = []
+        for i, block in enumerate(blocks):
+            # 跳过标题和代码块等不适合插入图片的位置
+            if not block.startswith('#') and not block.startswith('```') and len(block.strip()) > 20:
+                suitable_positions.append(i)
+        
+        # 如果没有合适的位置，使用所有位置
+        if not suitable_positions:
+            suitable_positions = list(range(len(blocks)))
+        
+        # 计算均匀间隔
+        image_positions = []
+        if number_of_images == 1 and suitable_positions:
+            # 如果只有一张图片，放在中间位置
+            middle_index = len(suitable_positions) // 2
+            image_positions = [suitable_positions[middle_index]]
+        elif number_of_images == 2 and len(suitable_positions) >= 2:
+            # 如果有两张图片，分别放在1/3和2/3处
+            first_pos = suitable_positions[len(suitable_positions) // 3]
+            second_pos = suitable_positions[2 * len(suitable_positions) // 3]
+            image_positions = [first_pos, second_pos]
+        elif suitable_positions:
+            # 如果有多张图片，均匀分布
+            step = max(1, len(suitable_positions) // (number_of_images + 1))
+            indices = [min(len(suitable_positions) - 1, i * step) for i in range(1, number_of_images + 1)]
+            image_positions = [suitable_positions[i] for i in indices]
+        
+        # 确保不重复
+        image_positions = sorted(list(set(image_positions)))
+        
+        # 如果计算出的位置不够，添加更多位置
+        while len(image_positions) < number_of_images and suitable_positions:
+            # 找出间隔最大的地方插入新位置
+            if len(image_positions) >= 2:
+                # 找出最大间隔
+                max_gap = 0
+                insert_at = 0
+                for i in range(len(image_positions) - 1):
+                    gap = image_positions[i+1] - image_positions[i]
+                    if gap > max_gap:
+                        max_gap = gap
+                        insert_at = (image_positions[i] + image_positions[i+1]) // 2
             
-            # 如果所有图片都未插入（可能是因为image_positions为空），则在末尾添加
-            inserted_images = len([pos for pos in image_positions if pos < len(result_paragraphs)])
-            if inserted_images < len(images):
-                for i in range(inserted_images, len(images)):
-                    img = images[i]
-                    alt_text = img.get('alt_text', '')
-                    title = img.get('title', '')
-                    caption = alt_text or title or f"图片{i+1}"
-                    
-                    # 使用相对路径
-                    relative_path = os.path.relpath(img['local_path'], os.path.dirname(self.save_dir))
-                    relative_path = relative_path.replace('\\', '/')
-                    
-                    # 添加图片引用，包含标题和尺寸信息
-                    width = img.get('width', '')
-                    height = img.get('height', '')
-                    size_info = f" ({width}x{height})" if width and height else ""
-                    
-                    result.append(f"![{caption}]({relative_path} \"{caption}{size_info}\")")
+                if insert_at not in image_positions:
+                    image_positions.append(insert_at)
+            else:
+                # 如果只有一个位置，在开始或结束添加
+                if 0 not in image_positions and suitable_positions[0] not in image_positions:
+                    image_positions.append(suitable_positions[0])
+                elif suitable_positions[-1] not in image_positions:
+                    image_positions.append(suitable_positions[-1])
             
-            return '\n\n'.join(result)
+            # 确保不重复并排序
+            image_positions = sorted(list(set(image_positions)))
+        
+        # 截断到所需图片数
+        image_positions = image_positions[:number_of_images]
+        
+        # 插入图片标记
+        result = []
+        for i, block in enumerate(blocks):
+            result.append(block)
+            if i in image_positions:
+                result.append('[IMAGE]')
+        
+        return '\n\n'.join(result)
+    
+    def _split_markdown_blocks(self, content):
+        """更智能地分割Markdown内容为逻辑块
+        
+        考虑Markdown特殊格式如标题、列表等
+        """
+        # 首先按照空行分割
+        raw_paragraphs = re.split(r'\n\s*\n', content)
+        paragraphs = []
+        
+        for para in raw_paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+            
+            # 检查是否是标题行
+            if re.match(r'^#{1,6}\s+', para):
+                paragraphs.append(para)
+                continue
+            
+            # 检查是否是列表
+            if re.match(r'^[-*+]\s+', para) or re.match(r'^\d+\.\s+', para):
+                # 处理列表项
+                list_items = re.split(r'\n(?=[-*+]\s+|\d+\.\s+)', para)
+                for item in list_items:
+                    if item.strip():
+                        paragraphs.append(item)
+                continue
+            
+            # 检查是否是代码块
+            if para.startswith('```') and para.endswith('```'):
+                paragraphs.append(para)
+                continue
+            
+            # 其他普通段落
+            paragraphs.append(para)
+        
+        return paragraphs
     
     def _get_extension_from_content_type(self, content_type):
         """根据Content-Type获取文件扩展名"""
@@ -387,3 +445,29 @@ class ImageProcessor:
         valid_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
         ext = os.path.splitext(filename)[1].lower()
         return ext in valid_extensions
+
+    def check_image_distribution(self, content, number_of_images):
+        """检查图片标记在内容中的分布是否合理"""
+        # 使用更适合Markdown的段落分割方法
+        paragraphs = self._split_markdown_blocks(content)
+        
+        image_positions = []
+        for i, para in enumerate(paragraphs):
+            if '[IMAGE]' in para:
+                image_positions.append(i)
+        
+        # 检查图片是否过度集中
+        if len(image_positions) > 1:
+            avg_distance = len(paragraphs) / (len(image_positions) + 1)
+            actual_distances = []
+            last_pos = -1
+            for pos in image_positions:
+                if last_pos >= 0:
+                    actual_distances.append(pos - last_pos)
+                last_pos = pos
+            
+            # 如果实际距离变异过大，说明分布不均
+            if actual_distances and max(actual_distances) > avg_distance * 2:
+                return False, "图片分布不均匀，建议更平均地分布图片"
+        
+        return True, "图片分布合理"

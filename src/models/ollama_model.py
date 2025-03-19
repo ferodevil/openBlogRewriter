@@ -49,7 +49,7 @@ class OllamaModel(BaseModel):
                         "Content-Type": "application/json"
                     }
                     
-                    response = requests.post(url, headers=headers, data=json.dumps(payload))
+                    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=360)
                     response.raise_for_status()
                     
                     result = response.json()
