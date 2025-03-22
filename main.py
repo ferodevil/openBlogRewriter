@@ -231,6 +231,7 @@ def step2_rewrite_and_optimize_content(blog_data, model_name, config, config_pat
         logger.info(f"改写后综合评分未达标 ({combined_score} < {combined_threshold})，开始额外优化")
         
         optimized_content = rewritten_content
+        contex_content = None
         
         # 根据优化策略构建提示词
         if strategy == "focus_on_quality":
@@ -323,6 +324,7 @@ def step2_rewrite_and_optimize_content(blog_data, model_name, config, config_pat
                 optimized_content = image_processor.redistribute_images(optimized_content, len(images))
             
             # 将图片嵌入到内容中，替换为实际的Markdown图片链接
+            contex_content = optimized_content
             optimized_content = image_processor.embed_images_in_content(optimized_content, images)
             logger.info(f"已将 {len(images)} 张图片嵌入到最终内容中")
         
@@ -336,7 +338,7 @@ def step2_rewrite_and_optimize_content(blog_data, model_name, config, config_pat
         logger.info(f"最终内容已保存到: {final_content_path}")
         
         return {
-            'content': optimized_content,
+            'content': contex_content,
             'title': seo_title,
             'description': seo_description,
             'quality_result': optimized_quality_result,
@@ -359,21 +361,42 @@ def step2_rewrite_and_optimize_content(blog_data, model_name, config, config_pat
             'images': images
         }
 
-def step3_publish_content(title, content, description, config_path, logger, images=None):
+def step3_publish_content(title, content, description, config_path, logger, images=None, keywords=None):
     """步骤3: 发布到WordPress"""
     logger.info("步骤3: 发布到WordPress")
     publisher = WordPressPublisher(config_path)
     
-    # 如果有图片，确保它们已经嵌入到内容中
-    if images and len(images) > 0:
-        logger.info(f"准备发布包含 {len(images)} 张图片的文章")
-        # 图片已经在前面步骤中嵌入到内容中，这里不需要额外处理
+    # 提取关键词，如果没有提供
+    if not keywords and 'metadata' in locals():
+        keywords = metadata.get('keywords', '').split(',')
     
-    result = publisher.publish_post(
-        title=title,
-        content=content,
-        excerpt=description
-    )
+    # 如果有图片，先上传图片再发布文章
+    if images and len(images) > 0:
+        logger.info(f"准备上传 {len(images)} 张图片并发布文章")
+        # 自动选择分类
+        categories = publisher.auto_categorize(title, content, keywords)
+        logger.info(f"自动选择的分类: {categories}")
+        
+        result = publisher.publish_post_with_images(
+            title=title,
+            content=content,
+            images=images,
+            excerpt=description,
+            keywords=keywords,
+            categories=categories  # 传入自动选择的分类
+        )
+    else:
+        # 没有图片，直接发布文章
+        # 自动选择分类
+        categories = publisher.auto_categorize(title, content, keywords)
+        logger.info(f"自动选择的分类: {categories}")
+        
+        result = publisher.publish_post(
+            title=title,
+            content=content,
+            excerpt=description,
+            categories=categories
+        )
     
     if result:
         logger.info(f"文章已发布: {result.get('link', '')}")
@@ -477,7 +500,7 @@ def merge_suggestions(quality_suggestions, seo_suggestions):
     
     # 创建关键词映射，用于识别相似建议
     keyword_map = {
-        "可读性": ["readability", "sentence", "句子", "段落", "结构"],
+        "可读性": ["readability", "句子", "句子", "段落", "结构"],
         "关键词": ["keyword", "关键词", "密度"],
         "长度": ["length", "长度", "字数", "too short", "too long", "太短", "太长"],
         "标题": ["heading", "标题", "h2", "h3"],

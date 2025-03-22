@@ -8,7 +8,7 @@ paths:
 cli:
   blog_urls: 
     - "https://kinobjects.com/blogs/news/the-best-holiday-incense-to-greet-your-guests-and-soothe-your-stress-for-thanksgiving-christmas-lunar-new-year-and-more"  # 要采集的博客URL列表
-  publish: false  # 是否发布到WordPress
+  publish: true  # 是否发布到WordPress
   max_iterations: 3  # SEO优化最大迭代次数
 
 # 爬虫配置
@@ -152,9 +152,9 @@ models:
 
 # WordPress配置
 wordpress:
-  url: "https://your-wordpress-site.com/wp-json/wp/v2"
-  username: "your-username"
-  password: "your-password"
+  url: "https://360spice.com/wp-json/wp/v2"
+  username: "ferodevil004@gmail.com"
+  app_password: "hCzf 30GE FXey UM0C gZWC Dnxy"  # 应用程序密码格式
   categories: [1, 2]  # 分类ID
   tags: [3, 4]  # 标签ID
   status: "draft"  # draft, publish, private
