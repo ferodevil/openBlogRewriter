@@ -96,11 +96,19 @@ class WordPressPublisher:
         # 构建API端点
         endpoint = f"{self.api_url}/posts"
         
+        # 验证发布状态
+        valid_statuses = ['publish', 'future', 'draft', 'pending', 'private']
+        if self.status not in valid_statuses:
+            self.logger.warning(f"无效的发布状态: {self.status}，将使用'draft'")
+            status = 'draft'
+        else:
+            status = self.status
+        
         # 构建请求数据
         data = {
             'title': title,
             'content': content,
-            'status': self.status,
+            'status': status,
             'categories': categories if categories is not None else self.categories,
             'tags': tags if tags is not None else self.tags
         }
@@ -123,16 +131,21 @@ class WordPressPublisher:
                 headers = self._get_auth_header()
                 headers['Content-Type'] = 'application/json'
                 
+                self.logger.debug(f"发送WordPress文章数据: 标题={title}, 状态={status}, 分类={data['categories']}")
+                
                 response = requests.post(
                     endpoint,
                     headers=headers,
-                    data=json.dumps(data)
+                    data=json.dumps(data),
+                    timeout=30  # 添加超时设置
                 )
                 
                 response.raise_for_status()
                 result = response.json()
                 
-                self.logger.info(f"文章发布成功: {result.get('link', '')}")
+                post_id = result.get('id', '未知')
+                post_link = result.get('link', '')
+                self.logger.info(f"文章发布成功: ID={post_id}, 链接={post_link}")
                 return result
             
             except requests.exceptions.RequestException as e:
@@ -145,6 +158,13 @@ class WordPressPublisher:
                     time.sleep(retry_delay)
                 else:
                     self.logger.error(f"已达到最大重试次数 ({max_retries})，发布失败")
+                    return None
+            except Exception as e:
+                self.logger.error(f"发布文章时发生未预期的错误: {e}")
+                if attempt < max_retries - 1:
+                    self.logger.info(f"等待 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)
+                else:
                     return None
         
         return None
@@ -447,11 +467,64 @@ class WordPressPublisher:
             categories = self.auto_categorize(title, updated_content, keywords)
             self.logger.info(f"自动选择的分类: {categories}")
         
+        # 检查内容中是否包含与标题相同的标题标记
+        if title in updated_content:
+            self.logger.warning(f"内容中包含与文章标题相同的文本，可能导致WordPress显示重复标题")
+            # 检查是否以Markdown标题格式开头
+            lines = updated_content.split('\n')
+            for i, line in enumerate(lines):
+                if line.strip() == f"# {title}" or line.strip() == f"## {title}":
+                    self.logger.info(f"检测到内容第{i+1}行包含与文章标题相同的Markdown标题，将移除")
+                    lines[i] = ""  # 移除该行
+                    updated_content = '\n'.join(lines)
+                    break
+        
+        # 将Markdown内容转换为HTML格式，确保图片正确显示
+        try:
+            import markdown
+            from markdown.extensions.fenced_code import FencedCodeExtension
+            from markdown.extensions.tables import TableExtension
+            
+            # 转换Markdown为HTML
+            html_content = markdown.markdown(
+                updated_content,
+                extensions=[
+                    'markdown.extensions.extra',
+                    'markdown.extensions.codehilite',
+                    FencedCodeExtension(),
+                    TableExtension(),
+                    'markdown.extensions.toc'
+                ]
+            )
+            
+            # 检查转换后的HTML是否包含所有图片
+            expected_img_count = len([img for img in uploaded_images if img['media_url'] in updated_content])
+            actual_img_count = html_content.count('<img')
+            
+            if actual_img_count < expected_img_count:
+                self.logger.warning(f"HTML转换后图片数量不匹配: 预期{expected_img_count}张，实际{actual_img_count}张")
+            else:
+                self.logger.info(f"已将Markdown内容转换为HTML格式，包含{actual_img_count}张图片")
+                
+            # 保存HTML内容到本地
+            html_file_path = os.path.join(get_base_dir(), 'output', f"html_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html")
+            os.makedirs(os.path.dirname(html_file_path), exist_ok=True)
+            with open(html_file_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            self.logger.info(f"HTML内容已保存到: {html_file_path}")
+            
+        except ImportError:
+            self.logger.warning("未安装markdown库，无法转换为HTML格式，将使用原始Markdown内容")
+            html_content = updated_content
+        except Exception as e:
+            self.logger.error(f"Markdown转HTML失败: {e}，将使用原始Markdown内容")
+            html_content = updated_content
+        
         # 发布带有更新后图片的文章
         self.logger.info(f"发布文章: {title}")
         return self.publish_post(
             title=title,
-            content=updated_content,
+            content=html_content,  # 使用转换后的HTML内容
             excerpt=excerpt,
             featured_media=featured_media_id,
             meta=meta,
